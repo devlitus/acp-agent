@@ -29,6 +29,6 @@ const tools = toolRegistry.forAgent(agentConfig.tools);
 
 const stream = acp.ndJsonStream(input, output);
 new acp.AgentSideConnection(
-  (conn) => new OllamaAgent(conn, llm, systemPrompt, tools),
+  (conn) => new OllamaAgent(conn, llm, systemPrompt, tools, AGENT_ID),
   stream,
 );

@@ -1,5 +1,6 @@
+import type { Database } from "bun:sqlite";
 import type { Message } from "../llm/types.ts";
-import { db } from "../db.ts";
+import { db as globalDb } from "../db.ts";
 
 type MessageRow = {
   role: string;
@@ -9,16 +10,22 @@ type MessageRow = {
 };
 
 export class SessionStore {
-  create(sessionId: string): void {
+  private db: Database;
+
+  constructor(db: Database = globalDb) {
+    this.db = db;
+  }
+
+  create(sessionId: string, agentId: string = "coding"): void {
     const now = Date.now();
-    db.run("INSERT INTO sessions (id, created_at, updated_at) VALUES (?, ?, ?)", [sessionId, now, now]);
+    this.db.run("INSERT INTO sessions (id, created_at, updated_at, agent_id) VALUES (?, ?, ?, ?)", [sessionId, now, now, agentId]);
   }
 
   load(sessionId: string): Message[] | null {
-    const session = db.query("SELECT id FROM sessions WHERE id = ?").get(sessionId);
+    const session = this.db.query("SELECT id FROM sessions WHERE id = ?").get(sessionId);
     if (!session) return null;
 
-    const rows = db.query(
+    const rows = this.db.query(
       "SELECT role, content, tool_calls, tool_call_id FROM messages WHERE session_id = ? ORDER BY seq",
     ).all(sessionId) as MessageRow[];
 
@@ -32,10 +39,10 @@ export class SessionStore {
 
   save(sessionId: string, history: Message[]): void {
     const now = Date.now();
-    db.run("UPDATE sessions SET updated_at = ? WHERE id = ?", [now, sessionId]);
+    this.db.run("UPDATE sessions SET updated_at = ? WHERE id = ?", [now, sessionId]);
 
     history.forEach((msg, seq) => {
-      db.run(
+      this.db.run(
         `INSERT OR IGNORE INTO messages (session_id, seq, role, content, tool_calls, tool_call_id, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -49,6 +56,17 @@ export class SessionStore {
         ],
       );
     });
+  }
+
+  setTitle(sessionId: string, title: string): void {
+    const now = Date.now();
+    this.db.run("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?", [title, now, sessionId]);
+  }
+
+  listByAgent(agentId: string): Array<{ id: string; title: string | null; created_at: number; updated_at: number }> {
+    return this.db.query(
+      "SELECT id, title, created_at, updated_at FROM sessions WHERE agent_id = ? ORDER BY updated_at DESC"
+    ).all(agentId) as Array<{ id: string; title: string | null; created_at: number; updated_at: number }>;
   }
 }
 

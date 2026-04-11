@@ -15,6 +15,7 @@ export class OllamaAgent implements acp.Agent {
     private llm: LLMProvider,
     private systemPrompt: string,
     private toolRegistry: import("../tools/registry.ts").ToolRegistry,
+    private agentId: string,
   ) {}
 
   async initialize(_params: acp.InitializeRequest): Promise<acp.InitializeResponse> {
@@ -26,7 +27,7 @@ export class OllamaAgent implements acp.Agent {
 
   async newSession(_params: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
     const sessionId = crypto.randomUUID();
-    sessionStore.create(sessionId);
+    sessionStore.create(sessionId, this.agentId);
     this.sessions.set(sessionId, {
       history: [{ role: "system", content: this.systemPrompt }],
       pendingPrompt: null,
