@@ -9,8 +9,10 @@ export const personalAgent: AgentConfig = {
   tools: ["save_memory", "recall_memory", "write_file", "read_file"],
   systemPromptFile: "personal.md",
   suggestedPrompts: [
-    "Remember this for later",
-    "What did I ask you to remember?",
-    "Help me organize my thoughts",
+    "What do you remember about me?",
+    "Create a to-do list for today",
+    "Take a note: ...",
+    "Help me organize my thoughts on...",
+    "Draft a quick summary of...",
   ],
 };

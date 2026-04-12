@@ -21,19 +21,23 @@ export function useChatSession(agentId: string, sessionId: string | null) {
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
   const [status, setStatus] = useState<"connecting" | "ready" | "thinking" | "error">("connecting");
   const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>([]);
+  const [agentName, setAgentName] = useState<string>("");
+  const [agentIcon, setAgentIcon] = useState<string>("");
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const showEmptyState = messages.length === 0 && status === "ready";
 
-  // Load suggested prompts
+  // Load agent config (name, icon, suggested prompts)
   useEffect(() => {
     fetch("/api/agents")
       .then((r) => r.json())
       .then((agents: AgentConfig[]) => {
         const agent = agents.find((a) => a.id === agentId);
         setSuggestedPrompts(agent?.suggestedPrompts ?? []);
+        setAgentName(agent?.name ?? "");
+        setAgentIcon(agent?.icon ?? "");
       })
       .catch(() => {});
   }, [agentId]);
@@ -85,7 +89,7 @@ export function useChatSession(agentId: string, sessionId: string | null) {
           if (last?.role === "agent") {
             return [...prev.slice(0, -1), { ...last, text: last.text + msg.text }];
           }
-          return [...prev, { role: "agent" as const, text: msg.text, streaming: true }];
+          return [...prev, { role: "agent" as const, text: msg.text, streaming: true, timestamp: new Date() }];
         });
         break;
 
@@ -148,7 +152,7 @@ export function useChatSession(agentId: string, sessionId: string | null) {
   function send(text: string) {
     if (!text || status !== "ready") return;
 
-    setMessages((prev) => [...prev, { role: "user" as const, text }]);
+    setMessages((prev) => [...prev, { role: "user" as const, text, timestamp: new Date() }]);
     setStatus("thinking");
     wsRef.current?.send(JSON.stringify({ type: "prompt", text }));
   }
@@ -168,6 +172,8 @@ export function useChatSession(agentId: string, sessionId: string | null) {
     pendingPermission,
     status,
     suggestedPrompts,
+    agentName,
+    agentIcon,
     showEmptyState,
     messagesEndRef,
     send,

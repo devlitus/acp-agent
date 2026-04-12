@@ -6,15 +6,16 @@ import { ModeToggle, useMode } from "./ModeToggle.tsx";
 import { SessionSidebar } from "./SessionSidebar.tsx";
 import { useChatSession } from "../hooks/useChatSession.ts";
 
-function EmptyState({ agentId, suggestedPrompts, onSelectPrompt }: {
+function EmptyState({ agentId, agentIcon, suggestedPrompts, onSelectPrompt }: {
   agentId: string;
+  agentIcon: string;
   suggestedPrompts: string[];
   onSelectPrompt: (prompt: string) => void;
 }) {
   return (
     <div className="flex flex-col items-center justify-center h-full py-20 px-6">
       <div className="text-center mb-10">
-        <p className="text-5xl mb-4">◈</p>
+        <p className="text-5xl mb-4">{agentIcon || "◈"}</p>
         <h2 className="text-2xl font-semibold text-on-surface font-display tracking-tight mb-1">
           How can I help you?
         </h2>
@@ -54,6 +55,8 @@ export function ChatView({ agentId, sessionId, onBack, onSwitchSession }: ChatVi
     pendingPermission,
     status,
     suggestedPrompts,
+    agentName,
+    agentIcon,
     showEmptyState,
     messagesEndRef,
     send,
@@ -86,7 +89,7 @@ export function ChatView({ agentId, sessionId, onBack, onSwitchSession }: ChatVi
         </button>
 
         <span className="font-semibold text-on-surface font-display text-sm sm:text-base tracking-tight truncate mx-3">
-          {agentId}
+          {agentName || agentId}
         </span>
 
         <div className="flex items-center gap-2">
@@ -133,6 +136,7 @@ export function ChatView({ agentId, sessionId, onBack, onSwitchSession }: ChatVi
             {showEmptyState ? (
               <EmptyState
                 agentId={agentId}
+                agentIcon={agentIcon}
                 suggestedPrompts={suggestedPrompts}
                 onSelectPrompt={handleSend}
               />

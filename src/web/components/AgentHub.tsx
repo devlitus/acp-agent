@@ -25,7 +25,7 @@ export function AgentHub({ onSelectAgent, onSelectSession }: AgentHubProps) {
     try {
       const [agentsRes, sessionsRes] = await Promise.all([
         fetch("/api/agents"),
-        fetch("/api/sessions?agentId=coding"),
+        fetch("/api/sessions"),
       ]);
       const agentsData = await agentsRes.json();
       const sessionsData = await sessionsRes.json();

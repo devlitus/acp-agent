@@ -74,6 +74,12 @@ export class SessionStore {
     ).all(agentId) as Array<{ id: string; title: string | null; created_at: number; updated_at: number }>;
   }
 
+  listRecent(limit: number = 10): Array<{ id: string; agent_id: string; title: string | null; updated_at: number }> {
+    return this.db.query(
+      "SELECT id, agent_id, title, updated_at FROM sessions ORDER BY updated_at DESC LIMIT ?"
+    ).all(limit) as Array<{ id: string; agent_id: string; title: string | null; updated_at: number }>;
+  }
+
   getDisplayMessages(sessionId: string): DisplayMessage[] | null {
     const session = this.db.query("SELECT id FROM sessions WHERE id = ?").get(sessionId);
     if (!session) return null;
