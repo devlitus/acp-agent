@@ -1,13 +1,8 @@
 import { useEffect, useState } from "react";
 import type { AgentConfig } from "../../agents/types.ts";
 import { AgentCard } from "./AgentCard.tsx";
-
-interface Session {
-  id: string;
-  agent_id: string;
-  title: string;
-  updated_at: string;
-}
+import { AgentSessionGroup } from "./AgentSessionGroup.tsx";
+import type { Session } from "../types.ts";
 
 interface AgentHubProps {
   onSelectAgent: (agentId: string) => void;
@@ -16,8 +11,9 @@ interface AgentHubProps {
 
 export function AgentHub({ onSelectAgent, onSelectSession }: AgentHubProps) {
   const [agents, setAgents] = useState<AgentConfig[]>([]);
-  const [recentSessions, setRecentSessions] = useState<Session[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => { loadData(); }, []);
 
@@ -34,7 +30,7 @@ export function AgentHub({ onSelectAgent, onSelectSession }: AgentHubProps) {
         return order[a.audience] - order[b.audience];
       });
       setAgents(sortedAgents);
-      setRecentSessions(sessionsData.slice(0, 5));
+      setSessions(sessionsData);
     } catch (err) {
       console.error("Failed to load data:", err);
     } finally {
@@ -42,8 +38,21 @@ export function AgentHub({ onSelectAgent, onSelectSession }: AgentHubProps) {
     }
   }
 
-  function relativeTime(dateStr: string): string {
-    const diffMs = Date.now() - new Date(dateStr).getTime();
+  async function handleDelete(e: React.MouseEvent, sessionId: string) {
+    e.stopPropagation();
+    setDeletingId(sessionId);
+    try {
+      await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    } catch (err) {
+      console.error("Failed to delete session:", err);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  function relativeTime(timestamp: number): string {
+    const diffMs = Date.now() - timestamp;
     const m = Math.floor(diffMs / 60000);
     const h = Math.floor(diffMs / 3600000);
     const d = Math.floor(diffMs / 86400000);
@@ -51,12 +60,16 @@ export function AgentHub({ onSelectAgent, onSelectSession }: AgentHubProps) {
     if (m < 60) return `${m}m ago`;
     if (h < 24) return `${h}h ago`;
     if (d < 7) return `${d}d ago`;
-    return new Date(dateStr).toLocaleDateString();
+    return new Date(timestamp).toLocaleDateString();
   }
 
-  function agentIcon(agentId: string): string {
-    return agents.find(a => a.id === agentId)?.icon ?? "🤖";
-  }
+  // Agrupa las sesiones por agente, conservando solo los agentes que tienen sesiones
+  const sessionsByAgent = agents
+    .map((agent) => ({
+      agent,
+      sessions: sessions.filter((s) => s.agent_id === agent.id),
+    }))
+    .filter(({ sessions }) => sessions.length > 0);
 
   if (loading) {
     return (
@@ -79,33 +92,27 @@ export function AgentHub({ onSelectAgent, onSelectSession }: AgentHubProps) {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-8 py-10 space-y-16">
-        {/* Recent sessions */}
-        {recentSessions.length > 0 && (
-          <section>
-            <p className="text-[11px] text-muted uppercase tracking-widest font-medium font-display mb-4">
+        {/* Sesiones agrupadas por agente */}
+        {sessionsByAgent.length > 0 && (
+          <section className="space-y-10">
+            <p className="text-[11px] text-muted uppercase tracking-widest font-medium font-display">
               Recent Sessions
             </p>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {recentSessions.map((session) => (
-                <button
-                  key={session.id}
-                  onClick={() => onSelectSession(session.id, session.agent_id)}
-                  className="flex items-center gap-4 p-4 bg-surface-high rounded-xl text-left hover:bg-surface-highest transition-colors duration-150"
-                >
-                  <span className="text-2xl flex-shrink-0">{agentIcon(session.agent_id)}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-on-surface text-sm truncate font-display">
-                      {session.title || "Untitled Session"}
-                    </p>
-                    <p className="text-xs text-muted mt-0.5">{relativeTime(session.updated_at)}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
+            {sessionsByAgent.map(({ agent, sessions: agentSessions }) => (
+              <AgentSessionGroup
+                key={agent.id}
+                agent={agent}
+                sessions={agentSessions}
+                deletingId={deletingId}
+                onSelectSession={onSelectSession}
+                onDelete={handleDelete}
+                relativeTime={relativeTime}
+              />
+            ))}
           </section>
         )}
 
-        {/* Agent grid */}
+        {/* Grid de agentes */}
         <section>
           <p className="text-[11px] text-muted uppercase tracking-widest font-medium font-display mb-6">
             Available Agents

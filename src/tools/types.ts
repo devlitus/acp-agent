@@ -4,6 +4,7 @@ import type { ToolCall, ToolDefinition } from "../llm/types.ts";
 export interface ToolContext {
   sessionId: string;
   connection: acp.AgentSideConnection;
+  signal?: AbortSignal;
 }
 
 export interface Tool {

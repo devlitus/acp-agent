@@ -1,5 +1,6 @@
 import type { Tool, ToolContext } from "./types.ts";
 import type { ToolCall } from "../llm/types.ts";
+import { readBodyCapped } from "./utils.ts";
 
 const DDG_URL = "https://html.duckduckgo.com/html/";
 const USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0";
@@ -27,14 +28,20 @@ export const webSearchTool: Tool = {
       required: ["query"],
     },
   },
-  async execute(toolCall: ToolCall, _ctx: ToolContext): Promise<string> {
+  async execute(toolCall: ToolCall, ctx: ToolContext): Promise<string> {
     const query = toolCall.arguments.query as string;
     const count = Math.min(10, Math.max(1, (toolCall.arguments.count as number | undefined) ?? 5));
+
+    const signals = [AbortSignal.timeout(10_000), ctx.signal].filter(
+      (s): s is AbortSignal => s != null,
+    );
+    const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0];
 
     let response: Response;
     try {
       response = await fetch(`${DDG_URL}?q=${encodeURIComponent(query)}&kl=us-en`, {
         headers: { "User-Agent": USER_AGENT },
+        signal,
       });
     } catch (err) {
       return `Error connecting to search: ${err instanceof Error ? err.message : String(err)}`;
@@ -44,7 +51,7 @@ export const webSearchTool: Tool = {
       return `Search error: ${response.status} ${response.statusText}`;
     }
 
-    const html = await response.text();
+    const html = await readBodyCapped(response, 100_000, signal);
     const results = parseDDGResults(html, count);
 
     if (results.length === 0) {

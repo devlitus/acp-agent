@@ -1,7 +1,9 @@
 import type { Tool, ToolContext } from "./types.ts";
 import type { ToolCall } from "../llm/types.ts";
+import { readBodyCapped } from "./utils.ts";
 
-const MAX_CHARS = 8_000;
+const MAX_CHARS = 4_000;
+const MAX_BYTES = 200_000;
 const USER_AGENT =
   "Mozilla/5.0 (compatible; ACP-Agent/1.0; +https://github.com/agentclientprotocol)";
 
@@ -22,18 +24,24 @@ export const fetchUrlTool: Tool = {
       required: ["url"],
     },
   },
-  async execute(toolCall: ToolCall, _ctx: ToolContext): Promise<string> {
+  async execute(toolCall: ToolCall, ctx: ToolContext): Promise<string> {
     const url = toolCall.arguments.url as string;
 
     if (!url.startsWith("http://") && !url.startsWith("https://")) {
       return "Error: URL must start with http:// or https://";
     }
 
+    const signals = [AbortSignal.timeout(10_000), ctx.signal].filter(
+      (s): s is AbortSignal => s != null,
+    );
+    const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0];
+
     let response: Response;
     try {
       response = await fetch(url, {
         headers: { "User-Agent": USER_AGENT },
         redirect: "follow",
+        signal,
       });
     } catch (err) {
       return `Error fetching URL: ${err instanceof Error ? err.message : String(err)}`;
@@ -48,7 +56,7 @@ export const fetchUrlTool: Tool = {
       return `Unsupported content type: ${contentType}. Only HTML and plain text are supported.`;
     }
 
-    const html = await response.text();
+    const html = await readBodyCapped(response, MAX_BYTES, signal);
     const text = extractText(html);
 
     if (!text) return "No readable content found on this page.";
@@ -59,6 +67,7 @@ export const fetchUrlTool: Tool = {
       : text;
   },
 };
+
 
 function extractText(html: string): string {
   const entities: Record<string, string> = { "&nbsp;": " ", "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'" };

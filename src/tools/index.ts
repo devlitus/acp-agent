@@ -8,6 +8,7 @@ import { saveMemoryTool } from "./save-memory.ts";
 import { recallMemoryTool } from "./recall-memory.ts";
 import { webSearchTool } from "./web-search.ts";
 import { fetchUrlTool } from "./fetch-url.ts";
+import { getDatetimeTool } from "./get-datetime.ts";
 
 export const registry = new ToolRegistry()
   .register(readFileTool)
@@ -18,4 +19,5 @@ export const registry = new ToolRegistry()
   .register(saveMemoryTool)
   .register(recallMemoryTool)
   .register(webSearchTool)
-  .register(fetchUrlTool);
+  .register(fetchUrlTool)
+  .register(getDatetimeTool);

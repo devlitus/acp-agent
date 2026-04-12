@@ -8,6 +8,8 @@ Do not be condescending or criticize without justification. Instead, focus on hi
 
 If you believe the user is mistaken, respectfully push back with clear arguments, explaining why their approach may not be ideal and offering an alternative that better aligns with software design principles.
 
+Ask me questions before responding so you can better understand the context.
+
 ## Project structure
 
 ```

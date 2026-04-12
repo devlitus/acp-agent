@@ -124,7 +124,7 @@ export class OllamaAgent implements acp.Agent {
 
         let result: string;
         try {
-          result = await this.toolRegistry.execute(toolCall, { sessionId, connection: this.connection });
+          result = await this.toolRegistry.execute(toolCall, { sessionId, connection: this.connection, signal });
         } catch (err) {
           result = `Tool error: ${err instanceof Error ? err.message : String(err)}`;
         }
