@@ -1,6 +1,14 @@
-# ACP Agent
+# ACP Agent Platform
 
-Agent Client Protocol (ACP) implementation with TypeScript and Bun.
+A multi-agent web platform built with [ACP (Agent Communication Protocol)](https://agentclientprotocol.com),
+TypeScript, and Bun. Users pick a specialized agent from a hub and chat with it in real time.
+The agent can use tools (read files, run commands, search the web) and requests permission before
+any destructive action.
+
+## Prerequisites
+
+- [Bun](https://bun.sh) ≥ 1.x
+- [Ollama](https://ollama.ai) running locally, or a Groq API key
 
 ## Installation
 
@@ -8,65 +16,203 @@ Agent Client Protocol (ACP) implementation with TypeScript and Bun.
 bun install
 ```
 
-## Usage
-
-### Run the Agent
+## Running
 
 ```bash
-bun run agent
+# Start the web server (serves the UI + handles WebSocket connections to agents)
+bun run server
 ```
 
-or
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-```bash
-bun run src/agent.ts
-```
+The server spawns an agent subprocess for each chat session automatically.
+You do not need to run the agent manually.
 
-The agent will start and wait for ACP protocol messages over stdio.
-
-### Run the CLI Client
+### CLI client (optional)
 
 ```bash
 bun run client
 ```
 
-or
+A terminal-based client for testing the agent directly without the web UI.
+
+## Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LLM_PROVIDER` | `ollama` | LLM backend: `ollama` or `groq` |
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama server URL |
+| `OLLAMA_MODEL` | `qwen3.5:latest` | Model name for Ollama |
+| `GROQ_API_KEY` | — | Required when `LLM_PROVIDER=groq` |
+| `GROQ_MODEL` | `qwen/qwen3-32b` | Model name for Groq |
+| `BRAVE_API_KEY` | — | Required for the Research agent's web search |
+
+Bun automatically loads `.env` files — no need to install dotenv.
+
+## How to add a new agent
+
+Three steps, no existing files change except `src/agents/index.ts`.
+
+**1. Create the agent config** `src/agents/<name>.ts`
+
+```ts
+import type { AgentConfig } from "./types.ts";
+
+export const myAgent: AgentConfig = {
+  id: "my-agent",
+  name: "My Agent",
+  description: "What this agent does, shown on the hub card.",
+  icon: "🤖",
+  audience: "all",            // "all" | "technical" | "mixed"
+  tools: ["read_file", "write_file"],
+  systemPromptFile: "my-agent.md",
+  suggestedPrompts: [
+    "First example prompt",
+    "Second example prompt",
+  ],
+};
+```
+
+**2. Write the system prompt** `src/agents/prompts/my-agent.md`
+
+Plain Markdown. Describe the agent's role, constraints, and behavior.
+Non-developers can edit this without touching TypeScript.
+
+**3. Register it** in `src/agents/index.ts`
+
+```ts
+import { myAgent } from "./my-agent.ts";
+
+export const registry = new AgentRegistry()
+  // ...existing agents...
+  .register(myAgent);
+```
+
+Done. The agent appears on the hub automatically.
+
+> **Available tool names:** `read_file`, `write_file`, `run_command`, `list_directory`,
+> `search_files`, `save_memory`, `recall_memory`, `web_search`, `fetch_url`
+
+## How to add a new tool
+
+Three steps, no existing files change except `src/tools/index.ts`.
+
+**1. Create the tool** `src/tools/<name>.ts`
+
+```ts
+import type { Tool, ToolContext } from "./types.ts";
+import type { ToolCall } from "../llm/types.ts";
+
+export const myTool: Tool = {
+  kind: "read",   // "read" = no permission needed | "execute" = asks user first
+  definition: {
+    name: "my_tool",           // snake_case, unique across all tools
+    description: "...",        // the LLM reads this to decide when to call it
+    parameters: {
+      type: "object",
+      properties: {
+        input: { type: "string", description: "..." },
+      },
+      required: ["input"],
+    },
+  },
+  async execute(toolCall: ToolCall, ctx: ToolContext): Promise<string> {
+    const input = toolCall.arguments.input as string;
+    // ... implementation ...
+    return "result as string";
+  },
+};
+```
+
+**2. Register it** in `src/tools/index.ts`
+
+```ts
+import { myTool } from "./my-tool.ts";
+
+export const registry = new ToolRegistry()
+  // ...existing tools...
+  .register(myTool);
+```
+
+**3. Grant access to agents** — in each `src/agents/<name>.ts` that should use it, add `"my_tool"` to the `tools` array.
+
+Done. No other file changes needed.
+
+## Project structure
+
+```
+src/
+  agent/
+    agent.ts          # OllamaAgent — ACP protocol + agent loop
+    session-store.ts  # All SQLite operations (sessions + messages)
+    index.ts          # Entry point for agent subprocess
+
+  agents/
+    registry.ts       # AgentRegistry — lookup, list, validate
+    types.ts          # AgentConfig interface
+    index.ts          # Registers all agents
+    coding.ts         # One file per agent config
+    writing.ts
+    devops.ts
+    data.ts
+    research.ts
+    personal.ts
+    prompts/          # System prompts as .md files (editable without code changes)
+
+  tools/
+    registry.ts       # ToolRegistry — lookup, dispatch, forAgent()
+    types.ts          # Tool interface + ToolContext
+    index.ts          # Registers all tools
+    read-file.ts      # One file per tool
+    write-file.ts
+    run-command.ts
+    list-directory.ts
+    search-files.ts
+    save-memory.ts
+    recall-memory.ts
+    web-search.ts
+    fetch-url.ts
+
+  llm/
+    types.ts          # Message, ToolDefinition, LLMProvider interfaces
+    openai-stream.ts  # Shared SSE streaming (used by Ollama + Groq)
+    ollama.ts         # OllamaProvider
+    groq.ts           # GroqProvider
+
+  web/
+    server.ts         # Bun.serve() — HTTP routes + WebSocket upgrade
+    bridge.ts         # ACPWebSocketBridge — translates ACP ↔ WebSocket messages
+    index.ts          # Server entry point
+    app.tsx           # React app: Hub ↔ Chat router
+    components/
+      AgentHub.tsx
+      AgentCard.tsx
+      ChatView.tsx
+      ChatBubble.tsx
+      ActionCard.tsx
+      PermissionModal.tsx
+      SessionSidebar.tsx
+      ModeToggle.tsx
+      ErrorBoundary.tsx
+
+  client/
+    client.ts         # Terminal UI client (CLI)
+    index.ts          # CLI entry point
+
+  db.ts               # Opens ~/.acp-agent/agent.db, runs migrations
+  config.ts           # All environment variables with defaults
+```
+
+## Running tests
 
 ```bash
-bun run src/client.ts
+bun test
 ```
 
-This will spawn the agent as a subprocess and send a test prompt, demonstrating:
-- Agent initialization and session creation
-- Agent message chunks
-- Tool calls (file reading, editing)
-- Permission requests for sensitive operations
-- User interaction via CLI
-
-**Note**: When the agent requests permission, you'll need to enter a number to select an option.
-
-### Use with Zed Editor
-
-Add to your Zed settings:
-
-```json
-{
-  "agent_servers": {
-    "ACP Agent": {
-      "command": "bun",
-      "args": ["run", "/path/to/acp-agent/src/agent.ts"]
-    }
-  }
-}
+Tests are co-located with the source files they test (`*.test.ts`).
 ```
-
-## Project Structure
-
-- `src/agent.ts` - ACP Agent implementation
-- `src/client.ts` - CLI client for testing the agent
-- `index.ts` - Entry point (minimal)
-
-## Resources
-
-- [ACP TypeScript SDK](https://agentclientprotocol.com/libraries/typescript)
-- [ACP Examples](https://github.com/agentclientprotocol/typescript-sdk/tree/main/src/examples)
+src/agents/registry.test.ts       # AgentRegistry unit tests
+src/agent/session-store.test.ts   # SessionStore unit tests
+src/tools/registry.test.ts        # ToolRegistry unit tests
+src/web/server.test.ts            # HTTP + WebSocket integration tests
+```

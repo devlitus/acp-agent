@@ -134,6 +134,7 @@ export class OllamaAgent implements acp.Agent {
           update: {
             sessionUpdate: "tool_call_update",
             toolCallId: toolCall.id,
+            title: toolCall.name,
             status: "completed",
             rawOutput: { result },
           },

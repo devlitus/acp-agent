@@ -6,6 +6,8 @@ import { listDirectoryTool } from "./list-directory.ts";
 import { searchFilesTool } from "./search-files.ts";
 import { saveMemoryTool } from "./save-memory.ts";
 import { recallMemoryTool } from "./recall-memory.ts";
+import { webSearchTool } from "./web-search.ts";
+import { fetchUrlTool } from "./fetch-url.ts";
 
 export const registry = new ToolRegistry()
   .register(readFileTool)
@@ -14,4 +16,6 @@ export const registry = new ToolRegistry()
   .register(listDirectoryTool)
   .register(searchFilesTool)
   .register(saveMemoryTool)
-  .register(recallMemoryTool);
+  .register(recallMemoryTool)
+  .register(webSearchTool)
+  .register(fetchUrlTool);

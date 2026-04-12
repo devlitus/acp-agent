@@ -13,5 +13,3 @@ export const registry = new AgentRegistry()
   .register(dataAgent)
   .register(researchAgent)
   .register(personalAgent);
-
-registry.validate();

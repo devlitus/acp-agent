@@ -9,6 +9,11 @@ type MessageRow = {
   tool_call_id: string | null;
 };
 
+export type DisplayMessage = {
+  role: "user" | "agent";
+  text: string;
+};
+
 export class SessionStore {
   private db: Database;
 
@@ -67,6 +72,31 @@ export class SessionStore {
     return this.db.query(
       "SELECT id, title, created_at, updated_at FROM sessions WHERE agent_id = ? ORDER BY updated_at DESC"
     ).all(agentId) as Array<{ id: string; title: string | null; created_at: number; updated_at: number }>;
+  }
+
+  getDisplayMessages(sessionId: string): DisplayMessage[] | null {
+    const session = this.db.query("SELECT id FROM sessions WHERE id = ?").get(sessionId);
+    if (!session) return null;
+
+    const rows = this.db.query(
+      "SELECT role, content FROM messages WHERE session_id = ? ORDER BY seq"
+    ).all(sessionId) as { role: string; content: string | null }[];
+
+    return rows
+      .filter((r) => (r.role === "user" || r.role === "assistant") && r.content !== null)
+      .map((r) => ({
+        role: r.role === "assistant" ? "agent" : "user",
+        text: r.content!,
+      }));
+  }
+
+  delete(sessionId: string): boolean {
+    const session = this.db.query("SELECT id FROM sessions WHERE id = ?").get(sessionId);
+    if (!session) return false;
+
+    this.db.run("DELETE FROM messages WHERE session_id = ?", [sessionId]);
+    this.db.run("DELETE FROM sessions WHERE id = ?", [sessionId]);
+    return true;
   }
 }
 

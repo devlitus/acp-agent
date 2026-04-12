@@ -4,7 +4,7 @@ export const AGENT_ID = process.env.AGENT_ID ?? "coding";
 
 // Ollama
 export const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://localhost:11434";
-export const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen3.5:latest";
+export const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "gemma4:latest";
 
 // Groq
 export const GROQ_API_KEY = process.env.GROQ_API_KEY ?? "";

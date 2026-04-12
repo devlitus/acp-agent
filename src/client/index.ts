@@ -22,7 +22,7 @@ async function main() {
   });
 
   const input = Writable.toWeb(agentProcess.stdin!);
-  const output = Readable.toWeb(agentProcess.stdout!) as ReadableStream<Uint8Array>;
+  const output = Readable.toWeb(agentProcess.stdout!) as unknown as ReadableStream<Uint8Array>;
 
   const client = new ACPClient(rl);
   const stream = acp.ndJsonStream(input, output);

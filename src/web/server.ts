@@ -1,10 +1,18 @@
 import { sessionStore } from "../agent/session-store.ts";
 import { ACPWebSocketBridge, type BridgeData } from "./bridge.ts";
 import { registry as agentRegistry } from "../agents/index.ts";
+import indexHtml from "./index.html";
 
 export function createServer(port: number = 3000): Bun.Server<BridgeData> {
   return Bun.serve<BridgeData>({
     port,
+    routes: {
+      "/": indexHtml,
+    },
+    development: {
+      hmr: true,
+      console: true,
+    },
     async fetch(req, server) {
       const url = new URL(req.url);
 
@@ -22,6 +30,16 @@ export function createServer(port: number = 3000): Bun.Server<BridgeData> {
         return handleCreateSession(req);
       }
 
+      const messagesMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
+      if (messagesMatch && req.method === "GET") {
+        return handleGetMessages(messagesMatch[1]!);
+      }
+
+      const sessionMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
+      if (sessionMatch && req.method === "DELETE") {
+        return handleDeleteSession(sessionMatch[1]!);
+      }
+
       if (url.pathname === "/ws") {
         const agentId = url.searchParams.get("agentId") || "coding";
         const sessionId = url.searchParams.get("sessionId") || undefined;
@@ -30,6 +48,7 @@ export function createServer(port: number = 3000): Bun.Server<BridgeData> {
 
       return new Response("Not Found", { status: 404 });
     },
+
     websocket: {
       open(ws) {
         const bridge = new ACPWebSocketBridge(ws);
@@ -69,6 +88,22 @@ async function handleCreateSession(req: Request): Promise<Response> {
       { status: 400 }
     );
   }
+}
+
+function handleGetMessages(sessionId: string): Response {
+  const messages = sessionStore.getDisplayMessages(sessionId);
+  if (messages === null) {
+    return new Response("Session not found", { status: 404 });
+  }
+  return Response.json(messages);
+}
+
+function handleDeleteSession(sessionId: string): Response {
+  const success = sessionStore.delete(sessionId);
+  if (!success) {
+    return new Response("Session not found", { status: 404 });
+  }
+  return new Response(null, { status: 204 });
 }
 
 function handleWebSocketUpgrade(

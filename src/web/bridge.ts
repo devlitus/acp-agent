@@ -1,6 +1,7 @@
 import * as acp from "@agentclientprotocol/sdk";
 import { ChildProcess, spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
+import { sessionStore } from "../agent/session-store.ts";
 
 export type BridgeData = {
   agentId: string;
@@ -144,6 +145,7 @@ export class ACPWebSocketBridge {
   private sessionId: string | null = null;
   private pendingPermissions = new Map<string, PendingPermission>();
   private wsClient: WebSocketClient | null = null;
+  private setTitleOnFirstMessage = false;
 
   constructor(private ws: Bun.ServerWebSocket<BridgeData>) {}
 
@@ -160,7 +162,7 @@ export class ACPWebSocketBridge {
     }
 
     const input = Writable.toWeb(this.agentProcess.stdin);
-    const output = Readable.toWeb(this.agentProcess.stdout) as ReadableStream<Uint8Array>;
+    const output = Readable.toWeb(this.agentProcess.stdout) as unknown as ReadableStream<Uint8Array>;
 
     this.wsClient = new WebSocketClient(this.ws, this.pendingPermissions);
 
@@ -204,6 +206,7 @@ export class ACPWebSocketBridge {
           mcpServers: [],
         });
         this.sessionId = newSession.sessionId;
+        this.setTitleOnFirstMessage = true;
       }
     } catch (err) {
       this.sendError(err instanceof Error ? err.message : String(err));
@@ -231,6 +234,7 @@ export class ACPWebSocketBridge {
   }
 
   cleanup(): void {
+    this.setTitleOnFirstMessage = false;
     this.agentProcess?.kill();
     this.agentProcess = null;
     this.connection = null;
@@ -243,6 +247,12 @@ export class ACPWebSocketBridge {
     if (!this.connection || !this.sessionId) {
       this.sendError("No active session");
       return;
+    }
+
+    if (this.setTitleOnFirstMessage) {
+      this.setTitleOnFirstMessage = false;
+      const title = text.trim().slice(0, 60);
+      sessionStore.setTitle(this.sessionId, title);
     }
 
     try {
