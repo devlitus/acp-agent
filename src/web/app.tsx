@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import { ChatView } from "./components/ChatView.tsx";
 import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { SetupPage } from "./components/SetupPage.tsx";
-import "./styles/global.css";
 
 function App() {
   const [sessionId, setSessionId] = useState<string | null>(null);

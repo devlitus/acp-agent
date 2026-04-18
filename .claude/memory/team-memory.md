@@ -13,6 +13,16 @@ Each agent is responsible for updating this file with their activity:
 
 ## Code Agent Activity
 
+### 2026-04-18 (feature: CSS link migration — Tailwind v4 con Bun)
+- **Task**: Mover `import "./styles/global.css"` de `app.tsx` a `<link rel="stylesheet">` en `index.html` para que el bundler CSS de Bun procese `@import "tailwindcss"` de Tailwind v4
+- **Files Modified**:
+  - `src/web/index.html`
+  - `src/web/app.tsx`
+- **Changes Summary**:
+  - `index.html:10`: Añadida `<link rel="stylesheet" href="./styles/global.css" />` dentro de `<head>`, después de la etiqueta de Google Fonts.
+  - `app.tsx:6`: Eliminada la línea `import "./styles/global.css";`. El fichero queda limpio sin imports huérfanos ni líneas en blanco sobrantes.
+- **Tests**: 79/79 pasando.
+
 ### 2026-04-18 (feature: fortalecer prompt research — web_search obligatorio)
 - **Task**: Fortalecer el prompt del agente research para que SIEMPRE use `web_search` antes de responder cualquier consulta sobre noticias o eventos actuales
 - **Files Modified**:
@@ -208,6 +218,19 @@ Each agent is responsible for updating this file with their activity:
 
 ## Code-Review Agent Activity
 
+### 2026-04-18 (feature: CSS link migration — Tailwind v4 con Bun)
+- **Task Reviewed**: Mover import de CSS de app.tsx al index.html como etiqueta link para que Bun procese Tailwind v4
+- **Result**: ✅ APPROVED
+- **Issues Found**: 0
+- **Files Reviewed**: `src/web/index.html`, `src/web/app.tsx`, `src/web/styles/global.css`
+- **Notes**:
+  - Etiqueta `<link>` correctamente ubicada en `<head>` con `href="./styles/global.css"`.
+  - `import "./styles/global.css"` eliminado sin dejar líneas en blanco ni imports huérfanos.
+  - Orden de carga semánticamente correcto: preconnect → fuentes Google → estilos propios.
+  - `global.css` confirmado con `@import "tailwindcss"` y `@theme` con variables del proyecto.
+  - Sin riesgos de seguridad (cambio en recursos estáticos propios).
+  - Conforme con CLAUDE.md: "HTML files can import .tsx, .jsx or .js files directly y `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle."
+
 ### 2026-04-18 (feature: fortalecer prompt research — segunda revisión completa)
 - **Task Reviewed**: Reescritura de `src/agents/prompts/research.md` para uso obligatorio de `web_search`
 - **Result**: ✅ APPROVED
@@ -348,6 +371,14 @@ Each agent is responsible for updating this file with their activity:
 ---
 
 ## Performance Agent Activity
+
+### 2026-04-18 (feature: CSS link migration — Tailwind v4 con Bun)
+- **Analysis Scope**: `src/web/index.html`, `src/web/app.tsx`, `src/web/styles/global.css`
+- **Critical Issues**: 0
+- **High Priority**: 1 (ya resuelto — el cambio elimina la cascada JS→CSS y activa el pipeline de Tailwind v4)
+- **Medium Priority**: 1 (FOUT de fuentes — monitorizar en producción, `font-display` implícito via URL de Google Fonts)
+- **Low Priority**: 2 (tree-shaking automático de Tailwind v4 ahora activo; `media` hint para estilos de impresión — no aplica aún)
+- **Report Location**: `docs/performance/css-link-tailwind-v4.md`
 
 ### 2026-04-18 (feature: fortalecer prompt research — actualizado)
 - **Analysis Scope**: `src/agents/prompts/research.md`, `src/agents/registry.ts`, `src/tools/invoke-agent.ts`, `src/tools/invoke-agent-loop.ts`, `src/tools/web-search.ts`, `src/tools/fetch-url.ts`
