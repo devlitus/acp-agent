@@ -201,6 +201,74 @@ describe("WebSocket /ws", () => {
   });
 });
 
+// ──────────────────────────────────────────
+// Orchestrator
+// ──────────────────────────────────────────
+
+describe("Orchestrator en /api/agents", () => {
+  test("el agente orchestrator aparece en la lista", async () => {
+    const res = await fetch(`${base}/api/agents`);
+    const agents = await res.json() as { id: string }[];
+
+    expect(agents.some((a) => a.id === "orchestrator")).toBe(true);
+  });
+
+  test("el orchestrator tiene name, icon y suggestedPrompts", async () => {
+    const res = await fetch(`${base}/api/agents`);
+    const agents = await res.json() as Record<string, unknown>[];
+    const orch = agents.find((a) => a.id === "orchestrator");
+
+    expect(orch).toBeDefined();
+    expect(typeof orch!.name).toBe("string");
+    expect(typeof orch!.icon).toBe("string");
+    expect(Array.isArray(orch!.suggestedPrompts)).toBe(true);
+  });
+});
+
+describe("Sesiones con agentId orchestrator", () => {
+  test("crea una sesión para orchestrator correctamente", async () => {
+    const res = await fetch(`${base}/api/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentId: "orchestrator" }),
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json() as { sessionId: string };
+    expect(typeof data.sessionId).toBe("string");
+    createdSessionIds.push(data.sessionId);
+  });
+
+  test("sesiones de orchestrator aparecen en el listado", async () => {
+    const createRes = await fetch(`${base}/api/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentId: "orchestrator" }),
+    });
+    const { sessionId } = await createRes.json() as { sessionId: string };
+    createdSessionIds.push(sessionId);
+
+    const listRes = await fetch(`${base}/api/sessions?agentId=orchestrator`);
+    expect(listRes.status).toBe(200);
+    const sessions = await listRes.json() as { id: string }[];
+    expect(sessions.some((s) => s.id === sessionId)).toBe(true);
+  });
+
+  test("la sesión de orchestrator aparece en /api/sessions/recent", async () => {
+    const createRes = await fetch(`${base}/api/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentId: "orchestrator" }),
+    });
+    const { sessionId } = await createRes.json() as { sessionId: string };
+    createdSessionIds.push(sessionId);
+
+    const recentRes = await fetch(`${base}/api/sessions/recent`);
+    const sessions = await recentRes.json() as { id: string }[];
+    expect(sessions.some((s) => s.id === sessionId)).toBe(true);
+  });
+});
+
 describe("General HTTP behavior", () => {
   test("returns 404 for unknown paths", async () => {
     const res = await fetch(`${base}/unknown/path`);
