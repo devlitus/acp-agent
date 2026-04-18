@@ -58,6 +58,9 @@ function openDb(): Database {
       content    TEXT    NOT NULL,
       created_at INTEGER NOT NULL
     );
+
+    CREATE INDEX IF NOT EXISTS idx_sessions_agent_id_updated ON sessions(agent_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_memory_created_at         ON memory(created_at DESC);
   `);
   migrate(db);
   return db;

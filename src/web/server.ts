@@ -20,9 +20,13 @@ export function createServer(port: number = 3000): Bun.Server<BridgeData> {
         return handleGetAgents();
       }
 
+      if (url.pathname === "/api/sessions/recent" && req.method === "GET") {
+        return handleGetRecentSessions();
+      }
+
       if (url.pathname === "/api/sessions" && req.method === "GET") {
         const agentId = url.searchParams.get("agentId");
-        if (!agentId) return handleGetRecentSessions();
+        if (!agentId) return new Response("Missing agentId", { status: 400 });
         return handleGetSessions(agentId);
       }
 

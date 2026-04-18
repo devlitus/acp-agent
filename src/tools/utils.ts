@@ -1,4 +1,4 @@
-import type * as acp from "@agentclientprotocol/sdk";
+import type { ExtendedAgentConnection } from "../agent/types.ts";
 
 export async function readBodyCapped(
   response: Response,
@@ -47,7 +47,7 @@ export async function readBodyCapped(
 }
 
 export async function runTerminal(
-  connection: acp.AgentSideConnection,
+  connection: ExtendedAgentConnection,
   sessionId: string,
   toolCallId: string,
   command: string,

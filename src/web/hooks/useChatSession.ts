@@ -14,23 +14,38 @@ type ServerMessage =
   | { type: "action_detail"; toolCallId: string; input: unknown; output: string }
   | { type: "permission"; toolCallId: string; title: string; options: { id: string; name: string; kind: string }[] }
   | { type: "done"; stopReason: string }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "sub_agent_start"; agentId: string; agentName: string; agentIcon: string }
+  | { type: "sub_agent_end" };
 
-export function useChatSession(agentId: string, sessionId: string | null) {
+export type ActiveSubAgent = { agentId: string; agentName: string; agentIcon: string };
+
+export function useChatSession(agentId: string, sessionId: string | null, agentConfig?: AgentConfig) {
   const [messages, setMessages] = useState<ConversationItem[]>([]);
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
   const [status, setStatus] = useState<"connecting" | "ready" | "thinking" | "error">("connecting");
-  const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>([]);
-  const [agentName, setAgentName] = useState<string>("");
-  const [agentIcon, setAgentIcon] = useState<string>("");
+  const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>(agentConfig?.suggestedPrompts ?? []);
+  const [agentName, setAgentName] = useState<string>(agentConfig?.name ?? "");
+  const [agentIcon, setAgentIcon] = useState<string>(agentConfig?.icon ?? "");
+  const [activeSubAgent, setActiveSubAgent] = useState<ActiveSubAgent | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const showEmptyState = messages.length === 0 && status === "ready";
 
-  // Load agent config (name, icon, suggested prompts)
+  // Sync agent config when prop changes (avoids redundant fetch when config is already available)
   useEffect(() => {
+    if (agentConfig) {
+      setSuggestedPrompts(agentConfig.suggestedPrompts);
+      setAgentName(agentConfig.name);
+      setAgentIcon(agentConfig.icon);
+    }
+  }, [agentConfig]);
+
+  // Load agent config via fetch only when not provided as prop
+  useEffect(() => {
+    if (agentConfig) return;
     fetch("/api/agents")
       .then((r) => r.json())
       .then((agents: AgentConfig[]) => {
@@ -40,7 +55,7 @@ export function useChatSession(agentId: string, sessionId: string | null) {
         setAgentIcon(agent?.icon ?? "");
       })
       .catch(() => {});
-  }, [agentId]);
+  }, [agentId, !!agentConfig]);
 
   // WebSocket connection
   useEffect(() => {
@@ -141,6 +156,14 @@ export function useChatSession(agentId: string, sessionId: string | null) {
       case "error":
         setStatus("error");
         break;
+
+      case "sub_agent_start":
+        setActiveSubAgent({ agentId: msg.agentId, agentName: msg.agentName, agentIcon: msg.agentIcon });
+        break;
+
+      case "sub_agent_end":
+        setActiveSubAgent(null);
+        break;
     }
   }
 
@@ -174,6 +197,7 @@ export function useChatSession(agentId: string, sessionId: string | null) {
     suggestedPrompts,
     agentName,
     agentIcon,
+    activeSubAgent,
     showEmptyState,
     messagesEndRef,
     send,

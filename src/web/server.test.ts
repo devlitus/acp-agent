@@ -116,6 +116,35 @@ describe("GET /api/sessions", () => {
 });
 
 // ──────────────────────────────────────────
+// GET /api/sessions/recent
+// ──────────────────────────────────────────
+
+describe("GET /api/sessions/recent", () => {
+  test("returns 200 with an array", async () => {
+    const res = await fetch(`${base}/api/sessions/recent`);
+    expect(res.status).toBe(200);
+
+    const sessions = await res.json();
+    expect(Array.isArray(sessions)).toBe(true);
+  });
+
+  test("created sessions appear in recent list", async () => {
+    const createRes = await fetch(`${base}/api/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentId: "coding" }),
+    });
+    const { sessionId } = await createRes.json() as { sessionId: string };
+    createdSessionIds.push(sessionId);
+
+    const res = await fetch(`${base}/api/sessions/recent`);
+    const sessions = await res.json() as { id: string }[];
+
+    expect(sessions.some((s) => s.id === sessionId)).toBe(true);
+  });
+});
+
+// ──────────────────────────────────────────
 // GET /api/sessions/:id/messages
 // ──────────────────────────────────────────
 

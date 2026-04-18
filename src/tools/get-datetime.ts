@@ -19,7 +19,7 @@ export const getDatetimeTool: Tool = {
       required: [],
     },
   },
-  execute(toolCall: ToolCall, _ctx: ToolContext): string {
+  async execute(toolCall: ToolCall, _ctx: ToolContext): Promise<string> {
     const tz = (toolCall.arguments.timezone as string | undefined) ?? undefined;
 
     let date: Date;

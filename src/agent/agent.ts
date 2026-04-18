@@ -1,6 +1,7 @@
 import * as acp from "@agentclientprotocol/sdk";
 import type { LLMProvider, Message } from "../llm/types.ts";
 import { sessionStore } from "./session-store.ts";
+import type { ExtendedAgentConnection } from "./types.ts";
 
 interface AgentSession {
   history: Message[];
@@ -9,9 +10,10 @@ interface AgentSession {
 
 export class OllamaAgent implements acp.Agent {
   private sessions = new Map<string, AgentSession>();
+  onSubAgentChange?: (agentId: string | null, agentName: string, agentIcon: string) => void;
 
   constructor(
-    private connection: acp.AgentSideConnection,
+    private connection: ExtendedAgentConnection,
     private llm: LLMProvider,
     private systemPrompt: string,
     private toolRegistry: import("../tools/registry.ts").ToolRegistry,
@@ -124,7 +126,7 @@ export class OllamaAgent implements acp.Agent {
 
         let result: string;
         try {
-          result = await this.toolRegistry.execute(toolCall, { sessionId, connection: this.connection, signal });
+          result = await this.toolRegistry.execute(toolCall, { sessionId, connection: this.connection, signal, llm: this.llm, onSubAgentChange: this.onSubAgentChange });
         } catch (err) {
           result = `Tool error: ${err instanceof Error ? err.message : String(err)}`;
         }

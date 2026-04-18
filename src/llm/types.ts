@@ -11,12 +11,18 @@ export interface Message {
   tool_call_id?: string;             // solo en mensajes de tool result
 }
 
+export interface ToolPropertySchema {
+  type: string;
+  description: string;
+  enum?: string[];
+}
+
 export interface ToolDefinition {
   name: string;
   description: string;
   parameters: {
     type: "object";
-    properties: Record<string, { type: string; description: string }>;
+    properties: Record<string, ToolPropertySchema>;
     required: string[];
   };
 }

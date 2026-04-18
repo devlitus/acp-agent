@@ -83,40 +83,52 @@ describe("Phase 1 - SessionStore Integration", () => {
     const codingSessions = store.listByAgent("coding");
     const writingSessions = store.listByAgent("writing");
 
-    expect(codingSessions).toHaveLength(2);
+    // Verify that sessions created for "coding" appear in the list
     expect(codingSessions.map(s => s.id)).toContain(session1);
     expect(codingSessions.map(s => s.id)).toContain(session3);
+    // Verify that "writing" session does NOT appear in "coding" list
+    expect(codingSessions.map(s => s.id)).not.toContain(session2);
 
-    expect(writingSessions).toHaveLength(1);
-    expect(writingSessions[0]?.id).toBe(session2);
+    // Verify that the "writing" session appears in the writing list
+    expect(writingSessions.map(s => s.id)).toContain(session2);
+    // Verify that "coding" sessions do NOT appear in "writing" list
+    expect(writingSessions.map(s => s.id)).not.toContain(session1);
+    expect(writingSessions.map(s => s.id)).not.toContain(session3);
   });
 
   it("listByAgent() returns sessions in descending updated_at order", () => {
     const store = new SessionStore();
 
     const baseTime = Date.now();
-    const session1 = `test-session-001`;
-    const session2 = `test-session-002`;
-    const session3 = `test-session-003`;
+    const session1 = `test-session-order-${baseTime}-1`;
+    const session2 = `test-session-order-${baseTime}-2`;
+    const session3 = `test-session-order-${baseTime}-3`;
 
     store.create(session1, "coding");
+    testSessions.push(session1);
     db.run("UPDATE sessions SET updated_at = ? WHERE id = ?", [baseTime, session1]);
 
     store.create(session2, "coding");
+    testSessions.push(session2);
     db.run("UPDATE sessions SET updated_at = ? WHERE id = ?", [baseTime + 1000, session2]);
 
     store.create(session3, "coding");
+    testSessions.push(session3);
     db.run("UPDATE sessions SET updated_at = ? WHERE id = ?", [baseTime + 2000, session3]);
 
-    testSessions.push(session1, session2, session3);
-
     const sessions = store.listByAgent("coding");
-    expect(sessions).toHaveLength(3);
-    
-    const sessionIds = sessions.map(s => s.id);
-    expect(sessionIds[0]).toBe(session3);
-    expect(sessionIds[1]).toBe(session2);
-    expect(sessionIds[2]).toBe(session1);
+    // Verificar que las tres sesiones del test están presentes
+    const sessionIds = sessions.map((s) => s.id);
+    expect(sessionIds).toContain(session1);
+    expect(sessionIds).toContain(session2);
+    expect(sessionIds).toContain(session3);
+
+    // Verificar el orden descendente de updated_at entre las sesiones creadas en este test
+    const idx1 = sessionIds.indexOf(session1);
+    const idx2 = sessionIds.indexOf(session2);
+    const idx3 = sessionIds.indexOf(session3);
+    expect(idx3).toBeLessThan(idx2);
+    expect(idx2).toBeLessThan(idx1);
   });
 
   it("listByAgent() returns empty array for agent with no sessions", () => {

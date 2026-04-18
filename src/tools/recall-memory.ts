@@ -2,6 +2,9 @@ import type { Tool, ToolContext } from "./types.ts";
 import type { ToolCall } from "../llm/types.ts";
 import { db } from "../db.ts";
 
+const stmtAll = db.prepare("SELECT id, content FROM memory ORDER BY created_at DESC");
+const stmtKeyword = db.prepare("SELECT id, content FROM memory WHERE content LIKE ? ORDER BY created_at DESC");
+
 export const recallMemoryTool: Tool = {
   kind: "read",
   definition: {
@@ -18,8 +21,8 @@ export const recallMemoryTool: Tool = {
   async execute(toolCall: ToolCall, _ctx: ToolContext): Promise<string> {
     const keyword = toolCall.arguments.keyword as string | undefined;
     const rows = keyword
-      ? db.query("SELECT id, content FROM memory WHERE content LIKE ? ORDER BY created_at DESC").all(`%${keyword}%`)
-      : db.query("SELECT id, content FROM memory ORDER BY created_at DESC").all();
+      ? stmtKeyword.all(`%${keyword}%`)
+      : stmtAll.all();
 
     const typed = rows as { id: number; content: string }[];
     return typed.length === 0

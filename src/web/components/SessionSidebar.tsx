@@ -1,41 +1,24 @@
 import { useState, useEffect } from "react";
-
-interface Session {
-  id: string;
-  title: string | null;
-  updated_at: number;
-}
+import type { Session } from "../types.ts";
+import { relativeTime } from "../utils/relativeTime.ts";
 
 interface SessionSidebarProps {
-  agentId: string;
   currentSessionId: string | null;
   onSelectSession: (sessionId: string) => void;
   onClose: () => void;
 }
 
-function formatRelativeTime(timestamp: number): string {
-  const diffMs = Date.now() - timestamp;
-  const m = Math.floor(diffMs / 60000);
-  const h = Math.floor(diffMs / 3600000);
-  const d = Math.floor(diffMs / 86400000);
-  if (m < 1) return "Ahora mismo";
-  if (m < 60) return `Hace ${m}m`;
-  if (h < 24) return `Hace ${h}h`;
-  if (d < 7) return `Hace ${d}d`;
-  return new Date(timestamp).toLocaleDateString();
-}
-
-export function SessionSidebar({ agentId, currentSessionId, onSelectSession, onClose }: SessionSidebarProps) {
+export function SessionSidebar({ currentSessionId, onSelectSession, onClose }: SessionSidebarProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/sessions?agentId=${agentId}`)
+    fetch("/api/sessions?agentId=orchestrator")
       .then((r) => r.json())
       .then(setSessions)
       .catch((err) => console.error("Failed to load sessions:", err))
       .finally(() => setLoading(false));
-  }, [agentId]);
+  }, []);
 
   return (
     <aside
@@ -73,7 +56,7 @@ export function SessionSidebar({ agentId, currentSessionId, onSelectSession, onC
             <p className="text-sm font-medium text-on-surface truncate font-display">
               {session.title || "Sin título"}
             </p>
-            <p className="text-xs text-muted/60 mt-0.5">{formatRelativeTime(session.updated_at)}</p>
+            <p className="text-xs text-muted/60 mt-0.5">{relativeTime(session.updated_at)}</p>
           </button>
         ))}
       </nav>

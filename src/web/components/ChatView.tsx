@@ -4,10 +4,11 @@ import { ActionCard } from "./ActionCard.tsx";
 import { PermissionModal } from "./PermissionModal.tsx";
 import { ModeToggle, useMode } from "./ModeToggle.tsx";
 import { SessionSidebar } from "./SessionSidebar.tsx";
+import { SubAgentIndicator } from "./SubAgentIndicator.tsx";
 import { useChatSession } from "../hooks/useChatSession.ts";
+import type { AgentConfig } from "../../agents/types.ts";
 
-function EmptyState({ agentId, agentIcon, suggestedPrompts, onSelectPrompt }: {
-  agentId: string;
+function EmptyState({ agentIcon, suggestedPrompts, onSelectPrompt }: {
   agentIcon: string;
   suggestedPrompts: string[];
   onSelectPrompt: (prompt: string) => void;
@@ -17,9 +18,9 @@ function EmptyState({ agentId, agentIcon, suggestedPrompts, onSelectPrompt }: {
       <div className="text-center mb-10">
         <p className="text-5xl mb-4">{agentIcon || "◈"}</p>
         <h2 className="text-2xl font-semibold text-on-surface font-display tracking-tight mb-1">
-          How can I help you?
+          ¿En qué puedo ayudarte?
         </h2>
-        <p className="text-sm text-muted capitalize">{agentId.replace(/-/g, " ")} is ready</p>
+        <p className="text-sm text-muted">Tu asistente inteligente está listo</p>
       </div>
       {suggestedPrompts.length > 0 && (
         <div className="w-full max-w-lg space-y-2">
@@ -41,11 +42,12 @@ function EmptyState({ agentId, agentIcon, suggestedPrompts, onSelectPrompt }: {
 interface ChatViewProps {
   agentId: string;
   sessionId: string | null;
+  agentConfig?: AgentConfig;
   onBack: () => void;
   onSwitchSession: (sessionId: string) => void;
 }
 
-export function ChatView({ agentId, sessionId, onBack, onSwitchSession }: ChatViewProps) {
+export function ChatView({ agentId, sessionId, agentConfig, onBack, onSwitchSession }: ChatViewProps) {
   const [mode, setMode] = useMode();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inputText, setInputText] = useState("");
@@ -57,12 +59,13 @@ export function ChatView({ agentId, sessionId, onBack, onSwitchSession }: ChatVi
     suggestedPrompts,
     agentName,
     agentIcon,
+    activeSubAgent,
     showEmptyState,
     messagesEndRef,
     send,
     cancel,
     selectPermission,
-  } = useChatSession(agentId, sessionId);
+  } = useChatSession(agentId, sessionId, agentConfig);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === "Escape" && sidebarOpen) setSidebarOpen(false); };
@@ -85,7 +88,7 @@ export function ChatView({ agentId, sessionId, onBack, onSwitchSession }: ChatVi
           onClick={onBack}
           className="text-muted hover:text-primary transition-colors text-sm font-medium font-display"
         >
-          ← <span className="hidden sm:inline">Back</span>
+          ✦ <span className="hidden sm:inline">Nueva conversación</span>
         </button>
 
         <span className="font-semibold text-on-surface font-display text-sm sm:text-base tracking-tight truncate mx-3">
@@ -124,7 +127,6 @@ export function ChatView({ agentId, sessionId, onBack, onSwitchSession }: ChatVi
 
         {sidebarOpen && (
           <SessionSidebar
-            agentId={agentId}
             currentSessionId={sessionId}
             onSelectSession={(id) => { onSwitchSession(id); setSidebarOpen(false); }}
             onClose={() => setSidebarOpen(false)}
@@ -135,7 +137,6 @@ export function ChatView({ agentId, sessionId, onBack, onSwitchSession }: ChatVi
           <div className="max-w-4xl mx-auto w-full">
             {showEmptyState ? (
               <EmptyState
-                agentId={agentId}
                 agentIcon={agentIcon}
                 suggestedPrompts={suggestedPrompts}
                 onSelectPrompt={handleSend}
@@ -157,6 +158,14 @@ export function ChatView({ agentId, sessionId, onBack, onSwitchSession }: ChatVi
 
       {pendingPermission && (
         <PermissionModal request={pendingPermission} onSelect={selectPermission} />
+      )}
+
+      {activeSubAgent && (
+        <SubAgentIndicator
+          agentId={activeSubAgent.agentId}
+          agentName={activeSubAgent.agentName}
+          agentIcon={activeSubAgent.agentIcon}
+        />
       )}
 
       {/* Input area */}

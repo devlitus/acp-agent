@@ -5,6 +5,7 @@ import { devopsAgent } from "./devops.ts";
 import { dataAgent } from "./data.ts";
 import { researchAgent } from "./research.ts";
 import { personalAgent } from "./personal.ts";
+import { orchestratorAgent } from "./orchestrator.ts";
 
 export const registry = new AgentRegistry()
   .register(codingAgent)
@@ -12,4 +13,5 @@ export const registry = new AgentRegistry()
   .register(devopsAgent)
   .register(dataAgent)
   .register(researchAgent)
-  .register(personalAgent);
+  .register(personalAgent)
+  .register(orchestratorAgent);

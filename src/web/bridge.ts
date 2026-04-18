@@ -1,7 +1,13 @@
 import * as acp from "@agentclientprotocol/sdk";
-import { ChildProcess, spawn } from "node:child_process";
-import { Readable, Writable } from "node:stream";
 import { sessionStore } from "../agent/session-store.ts";
+import { OllamaAgent } from "../agent/agent.ts";
+import { OllamaProvider } from "../llm/ollama.ts";
+import { GroqProvider } from "../llm/groq.ts";
+import { LLM_PROVIDER } from "../config.ts";
+import { registry as agentRegistry } from "../agents/index.ts";
+import { registry as toolRegistry } from "../tools/index.ts";
+import type { LLMProvider } from "../llm/types.ts";
+import { DirectConnection } from "./direct-connection.ts";
 
 export type BridgeData = {
   agentId: string;
@@ -14,198 +20,73 @@ type ClientMessage =
   | { type: "cancel" }
   | { type: "permission"; toolCallId: string; optionId: string };
 
-type ServerMessage =
+export type ServerMessage =
   | { type: "chunk"; text: string }
   | { type: "action"; toolCallId: string; title: string; status: "running" | "done" | "error" }
   | { type: "action_detail"; toolCallId: string; input: unknown; output: string }
   | { type: "permission"; toolCallId: string; title: string; options: { id: string; name: string; kind: string }[] }
   | { type: "done"; stopReason: string }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "sub_agent_start"; agentId: string; agentName: string; agentIcon: string }
+  | { type: "sub_agent_end" };
 
-type PendingPermission = {
+export type PendingPermission = {
   toolCallId: string;
   resolve: (optionId: string) => void;
+  reject: (reason?: unknown) => void;
 };
 
-class WebSocketClient implements acp.Client {
-  constructor(
-    private ws: Bun.ServerWebSocket<BridgeData>,
-    private pendingPermissions: Map<string, PendingPermission>,
-  ) {}
-
-  async requestPermission(
-    params: acp.RequestPermissionRequest,
-  ): Promise<acp.RequestPermissionResponse> {
-    const toolCallId = params.toolCall.toolCallId;
-
-    this.ws.send(
-      JSON.stringify({
-        type: "permission",
-        toolCallId,
-        title: params.toolCall.title,
-        options: params.options.map((opt) => ({
-          id: opt.optionId,
-          name: opt.name,
-          kind: opt.kind,
-        })),
-      } as ServerMessage),
-    );
-
-    const selectedOptionId = await new Promise<string>((resolve) => {
-      const permission: PendingPermission = { toolCallId, resolve };
-      this.pendingPermissions.set(toolCallId, permission);
-    });
-
-    return {
-      outcome: {
-        outcome: "selected",
-        optionId: selectedOptionId,
-      },
-    };
-  }
-
-  async sessionUpdate(params: acp.SessionNotification): Promise<void> {
-    const update = params.update;
-
-    switch (update.sessionUpdate) {
-      case "user_message_chunk":
-      case "agent_message_chunk":
-        if (update.content?.type === "text") {
-          this.ws.send(
-            JSON.stringify({ type: "chunk", text: update.content.text } as ServerMessage),
-          );
-        }
-        break;
-
-      case "tool_call":
-        this.ws.send(
-          JSON.stringify({
-            type: "action",
-            toolCallId: update.toolCallId,
-            title: update.title ?? "Unknown",
-            status: "running",
-          } as ServerMessage),
-        );
-        this.ws.send(
-          JSON.stringify({
-            type: "action_detail",
-            toolCallId: update.toolCallId,
-            input: update.rawInput,
-            output: "",
-          } as ServerMessage),
-        );
-        break;
-
-      case "tool_call_update": {
-        const wsStatus: "running" | "done" | "error" =
-          update.status === "completed" ? "done" :
-          update.status === "failed"    ? "error" :
-          "running";
-        this.ws.send(
-          JSON.stringify({
-            type: "action",
-            toolCallId: update.toolCallId,
-            title: update.title ?? "Unknown",
-            status: wsStatus,
-          } as ServerMessage),
-        );
-        this.ws.send(
-          JSON.stringify({
-            type: "action_detail",
-            toolCallId: update.toolCallId,
-            input: update.rawInput,
-            output: JSON.stringify(update.rawOutput),
-          } as ServerMessage),
-        );
-        break;
-      }
-
-      case "plan":
-      case "agent_thought_chunk":
-        break;
-    }
-  }
-
-  async writeTextFile(
-    _params: acp.WriteTextFileRequest,
-  ): Promise<acp.WriteTextFileResponse> {
-    return {};
-  }
-
-  async readTextFile(
-    _params: acp.ReadTextFileRequest,
-  ): Promise<acp.ReadTextFileResponse> {
-    return { content: "" };
+function createProvider(): LLMProvider {
+  switch (LLM_PROVIDER) {
+    case "groq":
+      return new GroqProvider();
+    case "ollama":
+      return new OllamaProvider();
+    default:
+      throw new Error(`Unknown LLM_PROVIDER: "${LLM_PROVIDER}". Use "ollama" or "groq".`);
   }
 }
 
 export class ACPWebSocketBridge {
-  private agentProcess: ChildProcess | null = null;
-  private connection: acp.ClientSideConnection | null = null;
+  private agent: OllamaAgent | null = null;
   private sessionId: string | null = null;
   private pendingPermissions = new Map<string, PendingPermission>();
-  private wsClient: WebSocketClient | null = null;
   private setTitleOnFirstMessage = false;
 
   constructor(private ws: Bun.ServerWebSocket<BridgeData>) {}
 
-  async start(agentId: string, existingSessionId?: string): Promise<void> {
-    const env = { ...process.env, AGENT_ID: agentId };
-
-    this.agentProcess = spawn("bun", ["run", "src/agent/index.ts"], {
-      env,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-
-    if (!this.agentProcess.stdin || !this.agentProcess.stdout) {
-      throw new Error("Failed to spawn agent process");
-    }
-
-    const input = Writable.toWeb(this.agentProcess.stdin);
-    const output = Readable.toWeb(this.agentProcess.stdout) as unknown as ReadableStream<Uint8Array>;
-
-    this.wsClient = new WebSocketClient(this.ws, this.pendingPermissions);
-
-    this.connection = new acp.ClientSideConnection(
-      () => this.wsClient!,
-      acp.ndJsonStream(input, output),
-    );
-
-    this.agentProcess.stderr?.on("data", (data) => {
-      console.error(`[Agent ${agentId}]`, data.toString());
-    });
-
-    this.agentProcess.on("exit", (code) => {
-      console.log(`Agent ${agentId} exited with code ${code}`);
-      this.sendError(`Agent process exited with code ${code}`);
-    });
-
+  async start(_agentId: string, existingSessionId?: string): Promise<void> {
     try {
-      const init = await this.connection.initialize({
-        protocolVersion: acp.PROTOCOL_VERSION,
-        clientCapabilities: {
-          fs: {
-            readTextFile: true,
-            writeTextFile: true,
-          },
-        },
-      });
+      const config = agentRegistry.get("orchestrator");
+      const systemPrompt = agentRegistry.getSystemPrompt(config);
+      const llm = createProvider();
+      const tools = toolRegistry.forAgent(config.tools);
+      const connection = new DirectConnection(this.ws, this.pendingPermissions);
 
-      console.log(`✅ Connected to agent (protocol v${init.protocolVersion})`);
+      this.agent = new OllamaAgent(connection, llm, systemPrompt, tools, "orchestrator");
+      this.agent.onSubAgentChange = (agentId, agentName, agentIcon) => {
+        if (agentId) {
+          this.send({ type: "sub_agent_start", agentId, agentName, agentIcon });
+        } else {
+          this.send({ type: "sub_agent_end" });
+        }
+      };
+
+      await this.agent.initialize({ protocolVersion: acp.PROTOCOL_VERSION });
 
       if (existingSessionId) {
-        await this.connection.loadSession({
+        await this.agent.loadSession({
           sessionId: existingSessionId,
           cwd: process.cwd(),
           mcpServers: [],
         });
         this.sessionId = existingSessionId;
       } else {
-        const newSession = await this.connection.newSession({
+        const { sessionId } = await this.agent.newSession({
           cwd: process.cwd(),
           mcpServers: [],
         });
-        this.sessionId = newSession.sessionId;
+        this.sessionId = sessionId;
         this.setTitleOnFirstMessage = true;
       }
     } catch (err) {
@@ -235,16 +116,16 @@ export class ACPWebSocketBridge {
 
   cleanup(): void {
     this.setTitleOnFirstMessage = false;
-    this.agentProcess?.kill();
-    this.agentProcess = null;
-    this.connection = null;
+    this.agent = null;
     this.sessionId = null;
+    for (const pending of this.pendingPermissions.values()) {
+      pending.reject(new Error("WebSocket cerrado"));
+    }
     this.pendingPermissions.clear();
-    this.wsClient = null;
   }
 
   private async handlePrompt(text: string): Promise<void> {
-    if (!this.connection || !this.sessionId) {
+    if (!this.agent || !this.sessionId) {
       this.sendError("No active session");
       return;
     }
@@ -256,7 +137,7 @@ export class ACPWebSocketBridge {
     }
 
     try {
-      const result = await this.connection.prompt({
+      const result = await this.agent.prompt({
         sessionId: this.sessionId,
         prompt: [{ type: "text", text }],
       });
@@ -268,10 +149,10 @@ export class ACPWebSocketBridge {
   }
 
   private async handleCancel(): Promise<void> {
-    if (!this.connection || !this.sessionId) return;
+    if (!this.agent || !this.sessionId) return;
 
     try {
-      await this.connection.cancel({ sessionId: this.sessionId });
+      await this.agent.cancel({ sessionId: this.sessionId });
     } catch (err) {
       this.sendError(err instanceof Error ? err.message : String(err));
     }
