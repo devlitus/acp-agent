@@ -3,20 +3,24 @@ import { Readable, Writable } from "node:stream";
 import { OllamaAgent } from "./agent.ts";
 import { OllamaProvider } from "../llm/ollama.ts";
 import { GroqProvider } from "../llm/groq.ts";
-import { LLM_PROVIDER, AGENT_ID } from "../config.ts";
+import { LMStudioProvider } from "../llm/lm-studio.ts";
+import { getLLMProvider, getAgentId } from "../config.ts";
 import { registry as agentRegistry } from "../agents/index.ts";
 import { registry as toolRegistry } from "../tools/index.ts";
 import type { LLMProvider } from "../llm/types.ts";
 import type { AgentConfig } from "../agents/types.ts";
 
 function createProvider(): LLMProvider {
-  switch (LLM_PROVIDER) {
+  const provider = getLLMProvider();
+  switch (provider) {
     case "groq":
       return new GroqProvider();
     case "ollama":
       return new OllamaProvider();
+    case "lm-studio":
+      return new LMStudioProvider();
     default:
-      throw new Error(`Unknown LLM_PROVIDER: "${LLM_PROVIDER}". Use "ollama" or "groq".`);
+      throw new Error(`Unknown LLM_PROVIDER: "${provider}". Use "ollama", "groq" or "lm-studio".`);
   }
 }
 
@@ -38,8 +42,9 @@ let agentConfig: AgentConfig;
 let systemPrompt: string;
 let tools: ReturnType<typeof toolRegistry.forAgent>;
 
+const agentId = getAgentId();
 try {
-  agentConfig = agentRegistry.get(AGENT_ID);
+  agentConfig = agentRegistry.get(agentId);
   systemPrompt = agentRegistry.getSystemPrompt(agentConfig);
   tools = toolRegistry.forAgent(agentConfig.tools);
 } catch (err) {
@@ -54,6 +59,6 @@ try {
 
 const stream = acp.ndJsonStream(input, output);
 new acp.AgentSideConnection(
-  (conn) => new OllamaAgent(conn, llm, systemPrompt, tools, AGENT_ID),
+  (conn) => new OllamaAgent(conn, llm, systemPrompt, tools, agentId),
   stream,
 );

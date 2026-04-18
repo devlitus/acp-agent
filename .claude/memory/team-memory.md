@@ -13,6 +13,46 @@ Each agent is responsible for updating this file with their activity:
 
 ## Code Agent Activity
 
+### 2026-04-18 (feature: fortalecer prompt research — web_search obligatorio)
+- **Task**: Fortalecer el prompt del agente research para que SIEMPRE use `web_search` antes de responder cualquier consulta sobre noticias o eventos actuales
+- **Files Modified**:
+  - `src/agents/prompts/research.md`
+- **Changes Summary**:
+  - Reescrito completamente `research.md` (de 20 a 51 líneas, de 1.253 a 2.845 bytes).
+  - Añadida sección **REGLA FUNDAMENTAL — OBLIGATORIA** con lenguaje imperativo explícito: "llama `web_search` ANTES de redactar tu respuesta. Sin excepciones."
+  - Lista de casos de uso obligatorio: noticias, eventos recientes, precios/estadísticas/versiones, tendencias.
+  - **PROHIBIDO** responder desde memoria de entrenamiento para noticias/eventos actuales.
+  - **Flujo de trabajo obligatorio** con 4 pasos numerados: web_search → evaluar → fetch_url → sintetizar+citar.
+  - Sección explícita de cuándo está permitido responder sin buscar (solo 3 casos: info que el usuario proporcionó, conceptos estables, notas/memoria).
+  - Herramientas documentadas con instrucción "Úsala PRIMERO" para `web_search`.
+  - `invoke-agent.ts` e `invoke-agent-loop.ts` verificados: propagación de resultados correcta, sin cambios necesarios.
+- **Tests**: 79/79 pasando. Errores TS preexistentes en `invoke-agent.test.ts` sin cambios.
+
+### 2026-04-18 (fix 8 issues code-review: instalación local)
+- **Task**: Corregir 8 issues detectados en code-review de la feature de instalación local
+- **Files Modified**:
+  - `src/config-file.ts`
+  - `src/config.ts`
+  - `src/llm/detector.ts`
+  - `src/llm/lm-studio.ts`
+  - `src/llm/ollama.ts`
+  - `src/llm/groq.ts`
+  - `src/web/bridge.ts`
+  - `src/web/server.ts`
+  - `src/agent/index.ts`
+  - `tests/config-file.test.ts`
+  - `package.json`
+- **Changes Summary**:
+  - Issue #1 (High): `config-file.ts` — eliminados `node:fs` (`mkdirSync`) y `node:os` (`homedir`). `HOME` derivado de `process.env.HOME ?? process.env.USERPROFILE ?? "/tmp"`. `ensureConfigDir()` convertida a async usando `Bun.$\`mkdir -p\``. `node:path` mantenido (sin Bun equiv directo para `join`).
+  - Issue #2 (High): `config-file.ts:72` — condición de bypass cambiada de `!== "ollama"` a `=== "groq"` para que `lm-studio` pase correctamente por la detección local.
+  - Issue #3 (High): `config.ts` — todas las constantes convertidas a funciones getter (`getLLMProvider()`, `getOllamaUrl()`, etc.). Constantes de compatibilidad hacia atrás mantenidas como `@deprecated` para no romper importadores existentes. `lm-studio.ts`, `ollama.ts`, `groq.ts` y `agent/index.ts` actualizados para usar los getters directamente.
+  - Issue #4 (High): `bridge.ts` — añadido `import { LMStudioProvider }` y `case "lm-studio": return new LMStudioProvider()`. `createProvider()` ahora lee `getLLMProvider()` en caliente.
+  - Issue #5 (Medium): `server.ts` — `development: { hmr, console }` envuelto en `...(process.env.NODE_ENV !== "production" && { ... })`.
+  - Issue #6 (Medium): `detector.ts` — `detectLLM()` reescrita con `Promise.all([detectOllama(), detectLMStudio()])` para detección en paralelo.
+  - Issue #7 (Medium): `tests/config-file.test.ts` — reescrito para importar y llamar las funciones reales (`readConfig`, `writeConfig`) via `_setConfigPathForTest()`. 6 tests reales en lugar de mocks manuales.
+  - Issue #8 (Low): `package.json` — eliminados `"vite"` y `"@vitejs/plugin-react"` de `devDependencies` (el script `dev` ya usa `bun --hot`).
+- **Tests**: 79/79 pasando. `bunx tsc --noEmit` sin nuevos errores (3 errores preexistentes en `invoke-agent.test.ts` no relacionados).
+
 ### 2026-04-18 (Iteración 4 Orchestrator Agent — indicador de sub-agente activo)
 - **Task**: Implementar Iteración 4: el usuario ve en tiempo real qué sub-agente está trabajando cuando el orchestrator delega una tarea
 - **Files Modified/Created**:
@@ -168,6 +208,56 @@ Each agent is responsible for updating this file with their activity:
 
 ## Code-Review Agent Activity
 
+### 2026-04-18 (feature: fortalecer prompt research — segunda revisión completa)
+- **Task Reviewed**: Reescritura de `src/agents/prompts/research.md` para uso obligatorio de `web_search`
+- **Result**: ✅ APPROVED
+- **Issues Found**: 0 bloqueantes (1 preexistente Medium no introducido por esta feature)
+- **Files Reviewed**: `src/agents/prompts/research.md`, `src/agents/research.ts`, `src/tools/invoke-agent.ts`, `src/tools/invoke-agent-loop.ts`, `src/agents/registry.ts`, `src/agents/prompts/orchestrator.md`, `src/agents/prompts/coding.md`, `src/agents/prompts/writing.md`, `src/agents/prompts/personal.md`
+- **Notes**:
+  - Rol principal claramente definido: "buscar y sintetizar información real de la web".
+  - `web_search` marcado como PRIMER PASO OBLIGATORIO sin excepciones para consultas factuales/noticiosas.
+  - Prohibición explícita de responder desde memoria de entrenamiento.
+  - Flujo web_search → evaluar → fetch_url → sintetizar+citar numerado con instrucción "No saltes ningún paso".
+  - Sección de excepciones bien delimitada (solo 3 casos: info aportada por el usuario, conceptos estables, gestión de notas).
+  - Cierre de refuerzo: "En caso de duda, busca".
+  - `invoke-agent.ts` línea 80: retorno correcto con fallback para resultado vacío.
+  - `invoke-agent-loop.ts`: `accumulated` acumula todos los chunks sin pérdida; ToolContext propaga `llm`, `signal` y `onSubAgentChange`.
+  - Preexistente (no introducido por esta feature): `coding.md`, `writing.md` y `personal.md` están en inglés mientras `research.md` y `orchestrator.md` están en español — inconsistencia de idioma entre prompts de sub-agentes.
+
+### 2026-04-18 (feature: fortalecer prompt research)
+- **Task Reviewed**: Reescritura de `src/agents/prompts/research.md` para uso obligatorio de `web_search`
+- **Result**: ✅ APPROVED
+- **Issues Found**: 0
+- **Files Reviewed**: `src/agents/prompts/research.md`, `src/agents/research.ts`, `src/tools/invoke-agent.ts`, `src/tools/invoke-agent-loop.ts`
+- **Notes**:
+  - Rol principal claramente definido: "buscar y sintetizar información real de la web".
+  - `web_search` marcado como PRIMER PASO OBLIGATORIO sin excepciones para consultas factuales/noticiosas.
+  - Prohibición explícita de responder desde memoria de entrenamiento.
+  - Flujo search → fetch → synthesize → cite preservado y numerado.
+  - Casos de excepción bien delimitados (solo 3 casos permitidos).
+  - `invoke-agent.ts` e `invoke-agent-loop.ts` verificados: sin problemas de propagación.
+
+### 2026-04-18 (fix 8 issues instalación local — verificación)
+- **Task Reviewed**: Corrección de los 8 issues del code-review de la feature de instalación local
+- **Result**: ✅ APPROVED
+- **Issues Found**: 0
+- **Files Reviewed**: `src/config-file.ts`, `src/config.ts`, `src/llm/detector.ts`, `src/llm/lm-studio.ts`, `src/llm/ollama.ts`, `src/llm/groq.ts`, `src/web/bridge.ts`, `src/web/server.ts`, `src/agent/index.ts`, `tests/config-file.test.ts`, `package.json`
+- **Notes**:
+  - Issue #1: `mkdirSync`/`homedir` correctamente eliminados; `Bun.$\`mkdir -p\`` async; HOME desde env vars con fallback a `/tmp`.
+  - Issue #2: Condición cambiada correctamente a `=== "groq"`, permitiendo que lm-studio pase por la detección local.
+  - Issue #3: Getters implementados correctamente; constantes `@deprecated` de compatibilidad son aceptables como estrategia de migración no disruptiva. Todos los providers actualizados para usar getters.
+  - Issue #4: `lm-studio` añadido en `bridge.ts` `createProvider()` con `getLLMProvider()` en caliente.
+  - Issue #5: `development: { hmr }` correctamente condicionado a `NODE_ENV !== "production"`.
+  - Issue #6: `Promise.all` implementado correctamente; preferencia de Ollama preservada con `??`.
+  - Issue #7: Tests ahora ejercitan el módulo real via `_setConfigPathForTest`; 6 tests en lugar de 4 mocks manuales.
+  - Issue #8: `vite` y `@vitejs/plugin-react` eliminados correctamente de `devDependencies`.
+
+### 2026-04-18 (instalación local para usuarios no técnicos)
+- **Task Reviewed**: Feature completa de instalación local — detector de LLM, config persistente, entry point único, SetupPage, endpoints de setup, GitHub Actions release
+- **Result**: ISSUES FOUND
+- **Issues Found**: 8
+- **Files Reviewed**: `src/llm/detector.ts`, `src/config-file.ts`, `src/llm/lm-studio.ts`, `src/main.ts`, `src/config.ts`, `src/agent/index.ts`, `src/web/server.ts`, `src/web/app.tsx`, `src/web/components/SetupPage.tsx`, `.github/workflows/release.yml`, `tests/detector.test.ts`, `tests/config-file.test.ts`, `package.json`
+
 ### 2026-04-12 (acordeones colapsables en AgentHub)
 - **Task Reviewed**: Convertir los grupos de sesiones por agente en AgentHub.tsx en acordeones/dropdowns colapsables
 - **Result**: CHANGES REQUIRED
@@ -258,6 +348,27 @@ Each agent is responsible for updating this file with their activity:
 ---
 
 ## Performance Agent Activity
+
+### 2026-04-18 (feature: fortalecer prompt research — actualizado)
+- **Analysis Scope**: `src/agents/prompts/research.md`, `src/agents/registry.ts`, `src/tools/invoke-agent.ts`, `src/tools/invoke-agent-loop.ts`, `src/tools/web-search.ts`, `src/tools/fetch-url.ts`
+- **Critical Issues**: 0
+- **High Priority**: 0
+- **Medium Priority**: 2
+  - Flujo obligatorio web_search + fetch_url secuencial añade 2–6 s de latencia por consulta; paralelizar con Promise.all en runSubAgentLoop
+  - Sin límite de iteraciones en runSubAgentLoop — nuevo prompt directivo aumenta riesgo de loops largos con modelos locales; añadir MAX_ITERATIONS=10
+- **Low Priority**: 3
+  - Token overhead +398 tokens por invocación (aceptado — tradeoff necesario para corregir comportamiento)
+  - `readFileSync` sin caché en `AgentRegistry.getSystemPrompt()` — añadir promptCache Map
+  - Regex de parseDDGResults creadas por llamada en lugar de a nivel de módulo
+- **Report Location**: `docs/performance/research-prompt-strengthening.md`
+
+### 2026-04-18 (fix 8 issues instalación local)
+- **Analysis Scope**: `src/config-file.ts`, `src/config.ts`, `src/llm/detector.ts`, `src/web/bridge.ts`, `src/web/server.ts`, `src/agent/index.ts`, `tests/config-file.test.ts`
+- **Critical Issues**: 0
+- **High Priority**: 0 (Fix #6 — detección paralela — ya aplicado y resuelve el bottleneck más importante)
+- **Medium Priority**: 2 (flag `_configDirEnsured` en `ensureConfigDir()`, regla linting para constantes `@deprecated`)
+- **Low Priority**: 2 (`development: { hmr }` condicional ya aplicado, estado global `_configPath` aceptable en serie)
+- **Report Location**: `docs/performance/local-install-fixes.md`
 
 ### 2026-04-12
 - **Analysis Scope**: Feature "Mejoras al agente Writing (A+B)" — impacto en tokens de contexto LLM, latencia de tools nuevas (web_search, fetch_url, search_files, list_directory, get_datetime), acumulacion de historial en sesiones largas

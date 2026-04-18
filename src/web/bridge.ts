@@ -3,7 +3,8 @@ import { sessionStore } from "../agent/session-store.ts";
 import { OllamaAgent } from "../agent/agent.ts";
 import { OllamaProvider } from "../llm/ollama.ts";
 import { GroqProvider } from "../llm/groq.ts";
-import { LLM_PROVIDER } from "../config.ts";
+import { LMStudioProvider } from "../llm/lm-studio.ts";
+import { getLLMProvider } from "../config.ts";
 import { registry as agentRegistry } from "../agents/index.ts";
 import { registry as toolRegistry } from "../tools/index.ts";
 import type { LLMProvider } from "../llm/types.ts";
@@ -37,13 +38,16 @@ export type PendingPermission = {
 };
 
 function createProvider(): LLMProvider {
-  switch (LLM_PROVIDER) {
+  const provider = getLLMProvider();
+  switch (provider) {
     case "groq":
       return new GroqProvider();
+    case "lm-studio":
+      return new LMStudioProvider();
     case "ollama":
       return new OllamaProvider();
     default:
-      throw new Error(`Unknown LLM_PROVIDER: "${LLM_PROVIDER}". Use "ollama" or "groq".`);
+      throw new Error(`Unknown LLM_PROVIDER: "${provider}". Use "ollama", "lm-studio" or "groq".`);
   }
 }
 

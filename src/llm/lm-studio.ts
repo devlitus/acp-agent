@@ -1,8 +1,13 @@
-import { getOllamaUrl, getOllamaModel } from "../config.ts";
+/**
+ * Proveedor LM Studio — compatible con la API de OpenAI.
+ * Reutiliza openai-stream.ts (Strategy pattern).
+ */
+
+import { getLMStudioUrl, getLMStudioModel } from "../config.ts";
 import { streamOpenAICompat } from "./openai-stream.ts";
 import type { LLMProvider, Message, ToolDefinition, ToolCall } from "./types.ts";
 
-export class OllamaProvider implements LLMProvider {
+export class LMStudioProvider implements LLMProvider {
   async call(
     messages: Message[],
     tools: ToolDefinition[],
@@ -10,9 +15,9 @@ export class OllamaProvider implements LLMProvider {
     onTextChunk: (text: string) => Promise<void>,
   ): Promise<{ toolCalls?: ToolCall[] }> {
     return streamOpenAICompat({
-      url: `${getOllamaUrl()}/v1/chat/completions`,
+      url: `${getLMStudioUrl()}/v1/chat/completions`,
       headers: {},
-      model: getOllamaModel(),
+      model: getLMStudioModel(),
       messages,
       tools,
       signal,

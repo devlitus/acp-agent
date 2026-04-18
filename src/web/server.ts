@@ -1,7 +1,16 @@
 import { sessionStore } from "../agent/session-store.ts";
 import { ACPWebSocketBridge, type BridgeData } from "./bridge.ts";
 import { registry as agentRegistry } from "../agents/index.ts";
+import { detectLLM } from "../llm/detector.ts";
+import { writeConfig } from "../config-file.ts";
 import indexHtml from "./index.html";
+
+/** Estado global: indica si el setup es necesario por falta de LLM */
+let setupRequired = false;
+
+export function setSetupRequired(value: boolean): void {
+  setupRequired = value;
+}
 
 export function createServer(port: number = 3000): Bun.Server<BridgeData> {
   return Bun.serve<BridgeData>({
@@ -9,12 +18,19 @@ export function createServer(port: number = 3000): Bun.Server<BridgeData> {
     routes: {
       "/": indexHtml,
     },
-    development: {
-      hmr: true,
-      console: true,
-    },
+    ...(process.env.NODE_ENV !== "production" && {
+      development: { hmr: true, console: true },
+    }),
     async fetch(req, server) {
       const url = new URL(req.url);
+
+      if (url.pathname === "/api/setup/detect" && req.method === "GET") {
+        return handleSetupDetect();
+      }
+
+      if (url.pathname === "/api/setup/status" && req.method === "GET") {
+        return Response.json({ setupRequired });
+      }
 
       if (url.pathname === "/api/agents" && req.method === "GET") {
         return handleGetAgents();
@@ -128,4 +144,28 @@ function handleWebSocketUpgrade(
   }
 
   return new Response();
+}
+
+async function handleSetupDetect(): Promise<Response> {
+  const detected = await detectLLM();
+  if (!detected) {
+    return Response.json({ ok: false });
+  }
+
+  const model = detected.models[0] ?? "gemma4:latest";
+  await writeConfig({ provider: detected.provider, baseUrl: detected.baseUrl, model });
+
+  // Actualizar env vars en caliente para el proceso actual
+  process.env.LLM_PROVIDER = detected.provider;
+  if (detected.provider === "ollama") {
+    process.env.OLLAMA_URL = detected.baseUrl;
+    process.env.OLLAMA_MODEL = model;
+  } else if (detected.provider === "lm-studio") {
+    process.env.LM_STUDIO_URL = detected.baseUrl;
+    process.env.LM_STUDIO_MODEL = model;
+  }
+
+  setupRequired = false;
+
+  return Response.json({ ok: true, provider: detected.provider, model });
 }
