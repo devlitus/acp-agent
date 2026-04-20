@@ -1,6 +1,7 @@
 import * as acp from "@agentclientprotocol/sdk";
 import type { LLMProvider, Message } from "../llm/types.ts";
 import { sessionStore } from "./session-store.ts";
+import { extractAndSave } from "./auto-memory.ts";
 import type { ExtendedAgentConnection } from "./types.ts";
 
 interface AgentSession {
@@ -63,12 +64,18 @@ export class OllamaAgent implements acp.Agent {
     try {
       await this.runAgentLoop(params.sessionId, session, abort.signal);
     } catch (err) {
-      if (abort.signal.aborted) return { stopReason: "cancelled" };
+      if (abort.signal.aborted) {
+        return { stopReason: "cancelled" };
+      }
       throw err;
+    } finally {
+      if (session.pendingPrompt === abort) {
+        session.pendingPrompt = null;
+      }
     }
 
-    session.pendingPrompt = null;
     sessionStore.save(params.sessionId, session.history);
+    extractAndSave(session.history, this.llm).catch(() => {});
     return { stopReason: "end_turn" };
   }
 

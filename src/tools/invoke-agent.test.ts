@@ -66,9 +66,9 @@ describe("invokeAgentTool", () => {
     );
 
     expect(events.length).toBe(2);
-    expect(events[0].agentId).toBe("research");
-    expect(events[0].agentName).toBeTruthy();
-    expect(events[1].agentId).toBeNull();
+    expect(events[0]!.agentId).toBe("research");
+    expect(events[0]!.agentName).toBeTruthy();
+    expect(events[1]!.agentId).toBeNull();
   });
 
   test("onSubAgentChange end se llama aunque el LLM falle", async () => {
@@ -149,6 +149,7 @@ describe("invokeAgentTool", () => {
     );
 
     const messages = capturedMessages[0];
+    if (!messages) throw new Error("No messages captured");
     const hasContext = messages.some(
       (m) => typeof m.content === "string" && m.content.includes("usuario quiere Y"),
     );

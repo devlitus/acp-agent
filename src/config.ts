@@ -23,3 +23,6 @@ export const getGroqModel = (): string => process.env.GROQ_MODEL ?? "qwen/qwen3-
 export const getLMStudioUrl = (): string => process.env.LM_STUDIO_URL ?? "http://localhost:1234";
 export const getLMStudioModel = (): string => process.env.LM_STUDIO_MODEL ?? "";
 
+// Tavily (web search)
+export const getTavilyApiKey = (): string => process.env.TAVILY_API_KEY ?? "";
+

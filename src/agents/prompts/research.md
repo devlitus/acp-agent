@@ -48,3 +48,8 @@ Si el contenido está truncado (límite de ~4.000 caracteres por URL), indícalo
 - **`write_file`** — Guarda el resultado de una investigación en un archivo.
 - **`save_memory`** — Guarda hallazgos importantes para recordarlos en sesiones futuras.
 - **`recall_memory`** — Recupera información previamente guardada.
+
+## Memoria
+
+- **Guardado proactivo**: Cuando encuentres datos que el usuario claramente quiere conservar (estadísticas clave, hallazgos relevantes, preferencias de formato de informe), usa `save_memory` sin que te lo pidan.
+- **Recuperar al inicio**: Cuando el usuario retome un tema de investigación, usa `recall_memory` para verificar hallazgos previos.

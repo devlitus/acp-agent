@@ -1,24 +1,38 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { Session } from "../types.ts";
-import { relativeTime } from "../utils/relativeTime.ts";
+import { SessionItem } from "./SessionItem.tsx";
 
 interface SessionSidebarProps {
   currentSessionId: string | null;
   onSelectSession: (sessionId: string) => void;
+  onDeleteSession: (sessionId: string) => void;
   onClose: () => void;
 }
 
-export function SessionSidebar({ currentSessionId, onSelectSession, onClose }: SessionSidebarProps) {
+export function SessionSidebar({ currentSessionId, onSelectSession, onDeleteSession, onClose }: SessionSidebarProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const loadSessions = useCallback(() => {
     fetch("/api/sessions?agentId=orchestrator")
       .then((r) => r.json())
       .then(setSessions)
       .catch((err) => console.error("Failed to load sessions:", err))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { loadSessions(); }, [loadSessions]);
+
+  function handleDelete(sessionId: string) {
+    fetch(`/api/sessions/${sessionId}`, { method: "DELETE" })
+      .then((r) => {
+        if (r.ok) {
+          setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+          onDeleteSession(sessionId);
+        }
+      })
+      .catch((err) => console.error("Failed to delete session:", err));
+  }
 
   return (
     <aside
@@ -44,20 +58,13 @@ export function SessionSidebar({ currentSessionId, onSelectSession, onClose }: S
           <p className="px-5 py-3 text-xs text-muted/50 italic">Sin sesiones anteriores</p>
         )}
         {!loading && sessions.map((session) => (
-          <button
+          <SessionItem
             key={session.id}
-            onClick={() => onSelectSession(session.id)}
-            className={`w-full text-left px-5 py-3 hover:bg-surface-high transition-colors duration-100 ${
-              session.id === currentSessionId
-                ? "bg-surface-highest border-l-2 border-primary"
-                : ""
-            }`}
-          >
-            <p className="text-sm font-medium text-on-surface truncate font-display">
-              {session.title || "Sin título"}
-            </p>
-            <p className="text-xs text-muted/60 mt-0.5">{relativeTime(session.updated_at)}</p>
-          </button>
+            session={session}
+            isCurrent={session.id === currentSessionId}
+            onSelect={onSelectSession}
+            onDelete={handleDelete}
+          />
         ))}
       </nav>
     </aside>

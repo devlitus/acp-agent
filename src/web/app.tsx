@@ -36,6 +36,10 @@ function App() {
     setSessionId(id);
   }
 
+  function handleSessionCreated(id: string) {
+    setSessionId(id);
+  }
+
   return (
     <ErrorBoundary onReset={handleNewSession}>
       <ChatView
@@ -43,6 +47,7 @@ function App() {
         sessionId={sessionId}
         onBack={handleNewSession}
         onSwitchSession={handleSwitchSession}
+        onSessionCreated={handleSessionCreated}
       />
     </ErrorBoundary>
   );

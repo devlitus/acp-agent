@@ -29,7 +29,8 @@ export type ServerMessage =
   | { type: "done"; stopReason: string }
   | { type: "error"; message: string }
   | { type: "sub_agent_start"; agentId: string; agentName: string; agentIcon: string }
-  | { type: "sub_agent_end" };
+  | { type: "sub_agent_end" }
+  | { type: "session_created"; sessionId: string };
 
 export type PendingPermission = {
   toolCallId: string;
@@ -56,6 +57,7 @@ export class ACPWebSocketBridge {
   private sessionId: string | null = null;
   private pendingPermissions = new Map<string, PendingPermission>();
   private setTitleOnFirstMessage = false;
+  private activePromptAbort: AbortController | null = null;
 
   constructor(private ws: Bun.ServerWebSocket<BridgeData>) {}
 
@@ -92,6 +94,7 @@ export class ACPWebSocketBridge {
         });
         this.sessionId = sessionId;
         this.setTitleOnFirstMessage = true;
+        this.send({ type: "session_created", sessionId });
       }
     } catch (err) {
       this.sendError(err instanceof Error ? err.message : String(err));
@@ -119,6 +122,8 @@ export class ACPWebSocketBridge {
   }
 
   cleanup(): void {
+    this.activePromptAbort?.abort();
+    this.activePromptAbort = null;
     this.setTitleOnFirstMessage = false;
     this.agent = null;
     this.sessionId = null;
@@ -134,6 +139,14 @@ export class ACPWebSocketBridge {
       return;
     }
 
+    if (this.activePromptAbort) {
+      this.sendError("Ya hay un prompt en ejecución. Espera o cancela primero.");
+      return;
+    }
+
+    const abort = new AbortController();
+    this.activePromptAbort = abort;
+
     if (this.setTitleOnFirstMessage) {
       this.setTitleOnFirstMessage = false;
       const title = text.trim().slice(0, 60);
@@ -146,17 +159,29 @@ export class ACPWebSocketBridge {
         prompt: [{ type: "text", text }],
       });
 
-      this.send({ type: "done", stopReason: result.stopReason });
+      if (!abort.signal.aborted) {
+        this.send({ type: "done", stopReason: result.stopReason });
+      }
     } catch (err) {
-      this.sendError(err instanceof Error ? err.message : String(err));
+      if (!abort.signal.aborted) {
+        this.sendError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      if (this.activePromptAbort === abort) {
+        this.activePromptAbort = null;
+      }
     }
   }
 
   private async handleCancel(): Promise<void> {
     if (!this.agent || !this.sessionId) return;
 
+    this.activePromptAbort?.abort();
+    this.activePromptAbort = null;
+
     try {
       await this.agent.cancel({ sessionId: this.sessionId });
+      this.send({ type: "done", stopReason: "cancelled" });
     } catch (err) {
       this.sendError(err instanceof Error ? err.message : String(err));
     }

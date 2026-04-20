@@ -1,11 +1,10 @@
 import type { Tool, ToolContext } from "./types.ts";
 import type { ToolCall } from "../llm/types.ts";
-import { readBodyCapped } from "./utils.ts";
+import { getTavilyApiKey } from "../config.ts";
 
-const DDG_URL = "https://html.duckduckgo.com/html/";
-const USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0";
+const TAVILY_URL = "https://api.tavily.com/search";
 
-type SearchResult = { title: string; url: string; description: string };
+type TavilyResult = { title: string; url: string; content: string };
 
 export const webSearchTool: Tool = {
   kind: "read",
@@ -29,84 +28,50 @@ export const webSearchTool: Tool = {
     },
   },
   async execute(toolCall: ToolCall, ctx: ToolContext): Promise<string> {
+    const apiKey = getTavilyApiKey();
+    if (!apiKey) {
+      return "Error: TAVILY_API_KEY is not configured. Set it in your environment or .env file.";
+    }
+
     const query = toolCall.arguments.query as string;
     const count = Math.min(10, Math.max(1, (toolCall.arguments.count as number | undefined) ?? 5));
 
-    const signals = [AbortSignal.timeout(10_000), ctx.signal].filter(
+    const signals = [AbortSignal.timeout(15_000), ctx.signal].filter(
       (s): s is AbortSignal => s != null,
     );
     const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0];
 
     let response: Response;
     try {
-      response = await fetch(`${DDG_URL}?q=${encodeURIComponent(query)}&kl=us-en`, {
-        headers: { "User-Agent": USER_AGENT },
+      response = await fetch(TAVILY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: apiKey,
+          query,
+          max_results: count,
+          include_answer: false,
+        }),
         signal,
       });
     } catch (err) {
-      return `Error connecting to search: ${err instanceof Error ? err.message : String(err)}`;
+      return `Error connecting to Tavily: ${err instanceof Error ? err.message : String(err)}`;
     }
 
     if (!response.ok) {
-      return `Search error: ${response.status} ${response.statusText}`;
+      const body = await response.text().catch(() => "");
+      return `Tavily API error: ${response.status} ${response.statusText}${body ? ` — ${body.slice(0, 200)}` : ""}`;
     }
 
-    const html = await readBodyCapped(response, 100_000, signal);
-    const results = parseDDGResults(html, count);
+    const data = await response.json() as { results?: TavilyResult[] };
+    const results = data.results ?? [];
 
     if (results.length === 0) {
       return "No results found.";
     }
 
     return results
-      .map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.description}`)
+      .map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.content}`)
       .join("\n\n");
   },
 };
-
-function parseDDGResults(html: string, limit: number): SearchResult[] {
-  const results: SearchResult[] = [];
-
-  const titlePattern = /class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g;
-  const snippetPattern = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
-
-  const snippets: string[] = [];
-  let snipMatch: RegExpExecArray | null;
-  while ((snipMatch = snippetPattern.exec(html)) !== null) {
-    snippets.push(cleanText(snipMatch[1] ?? ""));
-  }
-
-  let titleMatch: RegExpExecArray | null;
-  let idx = 0;
-  while ((titleMatch = titlePattern.exec(html)) !== null && results.length < limit) {
-    const url = decodeUddg(titleMatch[1] ?? "");
-    const title = cleanText(titleMatch[2] ?? "");
-    if (title && url) {
-      results.push({ title, url, description: snippets[idx] ?? "" });
-      idx++;
-    }
-  }
-
-  return results;
-}
-
-function decodeUddg(href: string): string {
-  const match = href.match(/uddg=([^&]+)/);
-  if (match?.[1]) {
-    try {
-      return decodeURIComponent(match[1]);
-    } catch {
-      return match[1];
-    }
-  }
-  return href.startsWith("http") ? href : "";
-}
-
-function cleanText(raw: string): string {
-  const entities: Record<string, string> = {
-    "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'", "&nbsp;": " ",
-  };
-  let text = raw.replace(/<[^>]+>/g, "");
-  for (const [e, v] of Object.entries(entities)) text = text.replaceAll(e, v);
-  return text.replace(/\s{2,}/g, " ").trim();
-}

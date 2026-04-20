@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ChatBubble, type ChatMessage } from "./ChatBubble.tsx";
 import { ActionCard } from "./ActionCard.tsx";
 import { PermissionModal } from "./PermissionModal.tsx";
@@ -45,12 +45,14 @@ interface ChatViewProps {
   agentConfig?: AgentConfig;
   onBack: () => void;
   onSwitchSession: (sessionId: string) => void;
+  onSessionCreated?: (sessionId: string) => void;
 }
 
-export function ChatView({ agentId, sessionId, agentConfig, onBack, onSwitchSession }: ChatViewProps) {
+export function ChatView({ agentId, sessionId, agentConfig, onBack, onSwitchSession, onSessionCreated }: ChatViewProps) {
   const [mode, setMode] = useMode();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inputText, setInputText] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const {
     messages,
@@ -65,13 +67,17 @@ export function ChatView({ agentId, sessionId, agentConfig, onBack, onSwitchSess
     send,
     cancel,
     selectPermission,
-  } = useChatSession(agentId, sessionId, agentConfig);
+  } = useChatSession(agentId, sessionId, agentConfig, { onSessionCreated });
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === "Escape" && sidebarOpen) setSidebarOpen(false); };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, [sidebarOpen]);
+
+  useEffect(() => {
+    if (status === "ready" && messages.length > 0) inputRef.current?.focus();
+  }, [status, messages.length]);
 
   function handleSend(overrideText?: string) {
     const text = (overrideText ?? inputText).trim();
@@ -129,6 +135,7 @@ export function ChatView({ agentId, sessionId, agentConfig, onBack, onSwitchSess
           <SessionSidebar
             currentSessionId={sessionId}
             onSelectSession={(id) => { onSwitchSession(id); setSidebarOpen(false); }}
+            onDeleteSession={(id) => { if (id === sessionId) onBack(); }}
             onClose={() => setSidebarOpen(false)}
           />
         )}
@@ -172,6 +179,7 @@ export function ChatView({ agentId, sessionId, agentConfig, onBack, onSwitchSess
       <footer className="flex-shrink-0 bg-surface px-4 sm:px-6 py-4">
         <div className="flex gap-3 max-w-4xl mx-auto">
           <input
+            ref={inputRef}
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}

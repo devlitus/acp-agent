@@ -16,11 +16,16 @@ type ServerMessage =
   | { type: "done"; stopReason: string }
   | { type: "error"; message: string }
   | { type: "sub_agent_start"; agentId: string; agentName: string; agentIcon: string }
-  | { type: "sub_agent_end" };
+  | { type: "sub_agent_end" }
+  | { type: "session_created"; sessionId: string };
 
 export type ActiveSubAgent = { agentId: string; agentName: string; agentIcon: string };
 
-export function useChatSession(agentId: string, sessionId: string | null, agentConfig?: AgentConfig) {
+interface UseChatSessionOptions {
+  onSessionCreated?: (sessionId: string) => void;
+}
+
+export function useChatSession(agentId: string, sessionId: string | null, agentConfig?: AgentConfig, options?: UseChatSessionOptions) {
   const [messages, setMessages] = useState<ConversationItem[]>([]);
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
   const [status, setStatus] = useState<"connecting" | "ready" | "thinking" | "error">("connecting");
@@ -59,6 +64,7 @@ export function useChatSession(agentId: string, sessionId: string | null, agentC
 
   // WebSocket connection
   useEffect(() => {
+    let stale = false;
     setMessages([]);
     setPendingPermission(null);
     setStatus("connecting");
@@ -70,21 +76,26 @@ export function useChatSession(agentId: string, sessionId: string | null, agentC
     const ws = new WebSocket(`${proto}//${window.location.host}/ws?${params}`);
     wsRef.current = ws;
 
-    ws.onopen = () => setStatus("ready");
-    ws.onclose = () => setStatus("error");
-    ws.onerror = () => setStatus("error");
-    ws.onmessage = (event) => handleServerMessage(JSON.parse(event.data));
+    ws.onopen = () => { if (!stale) setStatus("ready"); };
+    ws.onclose = () => { if (!stale) setStatus("error"); };
+    ws.onerror = () => { if (!stale) setStatus("error"); };
+    ws.onmessage = (event) => { if (!stale) handleServerMessage(JSON.parse(event.data)); };
 
-    return () => ws.close();
+    return () => {
+      stale = true;
+      ws.close();
+    };
   }, [agentId, sessionId]);
 
   // Load message history for existing sessions
   useEffect(() => {
     if (!sessionId) return;
+    let stale = false;
 
     fetch(`/api/sessions/${sessionId}/messages`)
       .then((r) => r.json())
       .then((data: DisplayMessage[]) => {
+        if (stale) return;
         const history: ConversationItem[] = data.map((m) => {
           if (m.role === "agent") {
             return { role: "agent" as const, text: m.text, streaming: false };
@@ -93,7 +104,9 @@ export function useChatSession(agentId: string, sessionId: string | null, agentC
         });
         setMessages(history);
       })
-      .catch((err) => console.error("Failed to load history:", err));
+      .catch((err) => { if (!stale) console.error("Failed to load history:", err); });
+
+    return () => { stale = true; };
   }, [sessionId]);
 
   function handleServerMessage(msg: ServerMessage) {
@@ -164,6 +177,10 @@ export function useChatSession(agentId: string, sessionId: string | null, agentC
       case "sub_agent_end":
         setActiveSubAgent(null);
         break;
+
+      case "session_created":
+        options?.onSessionCreated?.(msg.sessionId);
+        break;
     }
   }
 
@@ -182,7 +199,6 @@ export function useChatSession(agentId: string, sessionId: string | null, agentC
 
   function cancel() {
     wsRef.current?.send(JSON.stringify({ type: "cancel" }));
-    setStatus("ready");
   }
 
   function selectPermission(toolCallId: string, optionId: string) {
