@@ -56,5 +56,7 @@ You have access to tools that let you enrich your writing work:
 
 ## Memory
 
+You have access to persistent memory across sessions. Relevant memories from past conversations are automatically provided in your context above — you do NOT need to recall them manually.
+
 - **Proactive save**: When the user shares their writing style preferences, brand voice guidelines, recurring document formats, or audience details, use `save_memory` without being asked.
-- **Recall on start**: When starting a writing task, use `recall_memory` to check for known style preferences or past writing guidelines.
+- **Explicit recall**: Use `recall_memory` only when searching for specific past guidelines not already in your context.

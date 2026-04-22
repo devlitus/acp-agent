@@ -1,5 +1,5 @@
 import type { LLMProvider, Message } from "../llm/types.ts";
-import { db } from "../db.ts";
+import { memoryStore } from "./memory-store.ts";
 
 const EXTRACTION_PROMPT = `You are a memory extraction system. Analyze the conversation and extract facts worth remembering for future sessions.
 
@@ -10,18 +10,6 @@ Rules:
 - If nothing worth remembering, respond with exactly: NONE
 - Keep facts concise (one sentence each)
 - Do NOT extract facts the user already asked to forget`;
-
-const stmtInsert = db.prepare("INSERT INTO memory (content, created_at) VALUES (?, ?)");
-const stmtExists = db.prepare("SELECT 1 FROM memory WHERE content = ?");
-const stmtSimilar = db.prepare("SELECT content FROM memory WHERE content LIKE ?");
-
-function hasSimilar(content: string): boolean {
-  const words = content.split(/\s+/).filter(w => w.length > 4);
-  if (words.length === 0) return false;
-  const keyword = words.slice(0, 3).join("%");
-  const rows = stmtSimilar.all(`%${keyword}%`) as { content: string }[];
-  return rows.some(r => r.content.toLowerCase() === content.toLowerCase());
-}
 
 export async function extractAndSave(
   history: Message[],
@@ -61,11 +49,9 @@ export async function extractAndSave(
     .map(line => line.replace(/^[-•*\d.)\s]+/, "").trim())
     .filter(line => line.length > 5 && line.length < 500);
 
-  const now = Date.now();
   for (const fact of facts) {
-    const exists = stmtExists.get(fact);
-    if (!exists && !hasSimilar(fact)) {
-      stmtInsert.run(fact, now);
+    if (!memoryStore.hasSimilar(fact)) {
+      memoryStore.save(fact, "auto");
     }
   }
 }

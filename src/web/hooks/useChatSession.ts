@@ -1,12 +1,18 @@
 import { useState, useEffect, useRef } from "react";
-import type { ChatMessage } from "../components/ChatBubble.tsx";
+import type { ChatMessage, AgentMessage } from "../components/ChatBubble.tsx";
 import type { ToolAction } from "../components/ActionCard.tsx";
 import type { PermissionRequest } from "../components/PermissionModal.tsx";
 import type { DisplayMessage } from "../../agent/session-store.ts";
 import type { AgentConfig } from "../../agents/types.ts";
 
-type ActionItem = { role: "action" } & ToolAction;
-export type ConversationItem = ChatMessage | ActionItem;
+export type ActionItem = { role: "action" } & ToolAction;
+export type DelegationMessage = {
+  role: "delegation";
+  agentId: string;
+  agentName: string;
+  agentIcon: string;
+};
+export type ConversationItem = ChatMessage | ActionItem | DelegationMessage;
 
 type ServerMessage =
   | { type: "chunk"; text: string }
@@ -114,8 +120,8 @@ export function useChatSession(agentId: string, sessionId: string | null, agentC
       case "chunk":
         setMessages((prev) => {
           const last = prev[prev.length - 1];
-          if (last?.role === "agent") {
-            return [...prev.slice(0, -1), { ...last, text: last.text + msg.text }];
+          if (last?.role === "agent" && (last as AgentMessage).streaming === true) {
+            return [...prev.slice(0, -1), { ...last, text: (last as AgentMessage).text + msg.text }];
           }
           return [...prev, { role: "agent" as const, text: msg.text, streaming: true, timestamp: new Date() }];
         });
@@ -160,7 +166,7 @@ export function useChatSession(agentId: string, sessionId: string | null, agentC
         setMessages((prev) => {
           const last = prev[prev.length - 1];
           if (last?.role === "agent") {
-            return [...prev.slice(0, -1), { ...last, streaming: false }];
+            return [...prev.slice(0, -1), { ...(last as AgentMessage), streaming: false }];
           }
           return prev;
         });
@@ -172,10 +178,21 @@ export function useChatSession(agentId: string, sessionId: string | null, agentC
 
       case "sub_agent_start":
         setActiveSubAgent({ agentId: msg.agentId, agentName: msg.agentName, agentIcon: msg.agentIcon });
+        setMessages((prev) => [
+          ...prev,
+          { role: "delegation" as const, agentId: msg.agentId, agentName: msg.agentName, agentIcon: msg.agentIcon },
+        ]);
         break;
 
       case "sub_agent_end":
         setActiveSubAgent(null);
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "agent") {
+            return [...prev.slice(0, -1), { ...(last as AgentMessage), streaming: false }];
+          }
+          return prev;
+        });
         break;
 
       case "session_created":

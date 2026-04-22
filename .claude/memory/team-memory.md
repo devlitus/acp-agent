@@ -13,6 +13,20 @@ Each agent is responsible for updating this file with their activity:
 
 ## Code Agent Activity
 
+### 2026-04-18 (feature: Orchestrator UX — OrchestratorStatusBar + DelegationBubble)
+- **Task**: Implementar mejora de UX para el orquestador ACP: barra de progreso por fases (OrchestratorStatusBar) + mensajes inline de delegación (DelegationBubble)
+- **Files Modified/Created**:
+  - `src/web/components/OrchestratorStatusBar.tsx` (nuevo)
+  - `src/web/components/DelegationBubble.tsx` (nuevo)
+  - `src/web/hooks/useChatSession.ts`
+  - `src/web/components/ChatView.tsx`
+- **Changes Summary**:
+  - `OrchestratorStatusBar.tsx`: Nuevo componente que aparece entre el header y el área de mensajes cuando `status === "thinking"`. Muestra 4 fases en secuencia horizontal: Analizando → Delegando → Ejecutando → Respondiendo. La fase activa muestra `text-primary` con punto animado `animate-pulse`. Las inactivas en `text-muted/30`. Desaparece cuando `status === "ready"`.
+  - `DelegationBubble.tsx`: Nuevo componente de separador visual centrado inline en el chat. Muestra `──── 🔬 AgentName · delegando ────`. Estilo sutil con `text-muted/50` y líneas `bg-outline/20`.
+  - `useChatSession.ts`: `ActionItem` exportado. Nuevo tipo `DelegationMessage` exportado con campos `role`, `agentId`, `agentName`, `agentIcon`. `ConversationItem` ampliado con `DelegationMessage`. Handler `sub_agent_start` ahora también inserta un `DelegationMessage` en el array `messages`.
+  - `ChatView.tsx`: Eliminado `SubAgentIndicator` (import + render). Importados `OrchestratorStatusBar`, `DelegationBubble`, `ActionItem`, `useMemo`. `OrchestratorStatusBar` renderizado entre header y main. `DelegationBubble` renderizado en el loop de mensajes cuando `msg.role === "delegation"`. `hasRunningAction` y `hasFirstChunk` calculados con `useMemo` para evitar double scan O(N) en cada render.
+- **Tests**: 79/79 pasando. `bunx tsc --noEmit` sin errores nuevos (3 preexistentes en `invoke-agent.test.ts`).
+
 ### 2026-04-18 (feature: CSS link migration — Tailwind v4 con Bun)
 - **Task**: Mover `import "./styles/global.css"` de `app.tsx` a `<link rel="stylesheet">` en `index.html` para que el bundler CSS de Bun procese `@import "tailwindcss"` de Tailwind v4
 - **Files Modified**:
@@ -218,6 +232,25 @@ Each agent is responsible for updating this file with their activity:
 
 ## Code-Review Agent Activity
 
+### 2026-04-18 (fix: chatKey remount, streaming guard, personal prompt rewrite)
+- **Task Reviewed**: 3 cambios — (1) `chatKey` counter en `app.tsx` para forzar remount de `ChatView` al pulsar "Nueva conversación" cuando `sessionId` ya era `null`; (2) guard `streaming === true` en `case "chunk"` + sellado en `case "sub_agent_end"` en `useChatSession.ts`; (3) reescritura de `personal.md` con reglas obligatorias de `recall_memory`, `get_datetime` y sistema de categorías `[CITA]/[TAREA]/[NOTA]/[PREF]`
+- **Result**: ✅ APPROVED
+- **Issues Found**: 1 (Low — cast inconsistente en `case "done"` vs `case "sub_agent_end"` en `useChatSession.ts:157`; no bloquea aprobación)
+- **Files Reviewed**: `src/web/app.tsx`, `src/web/hooks/useChatSession.ts`, `src/agents/prompts/personal.md`, `src/web/components/ChatView.tsx`, `src/web/components/ChatBubble.tsx`
+
+### 2026-04-18 (feature: Orchestrator UX — OrchestratorStatusBar + DelegationBubble)
+- **Task Reviewed**: OrchestratorStatusBar (fases de progreso), DelegationBubble (separador inline), DelegationMessage en useChatSession, integración en ChatView con useMemo
+- **Result**: ✅ APPROVED
+- **Issues Found**: 1 (corregido — type guard predicate semánticamente incorrecto en `hasRunningAction`; corregido a cast simple)
+- **Files Reviewed**: `OrchestratorStatusBar.tsx`, `DelegationBubble.tsx`, `useChatSession.ts`, `ChatView.tsx`
+- **Notes**:
+  - Todos los props conformes al spec de la feature.
+  - `DelegationMessage` bien integrado en el union `ConversationItem`.
+  - `useMemo` aplicado tras análisis de performance — correcto.
+  - `SubAgentIndicator` eliminado correctamente del footer.
+  - Clases Tailwind v4 del proyecto usadas consistentemente.
+  - Errores TS preexistentes en `invoke-agent.test.ts` sin cambios.
+
 ### 2026-04-18 (feature: CSS link migration — Tailwind v4 con Bun)
 - **Task Reviewed**: Mover import de CSS de app.tsx al index.html como etiqueta link para que Bun procese Tailwind v4
 - **Result**: ✅ APPROVED
@@ -371,6 +404,22 @@ Each agent is responsible for updating this file with their activity:
 ---
 
 ## Performance Agent Activity
+
+### 2026-04-18 (feature: chatKey remount + streaming guard + personal prompt)
+- **Analysis Scope**: `src/web/app.tsx` (chatKey remount strategy), `src/web/hooks/useChatSession.ts` (streaming guard en `case "chunk"`, sellado en `case "sub_agent_end"`), `src/agents/prompts/personal.md` (reglas obligatorias recall_memory + get_datetime)
+- **Critical Issues**: 0
+- **High Priority**: 1 (latencia percibida acumulada por recall_memory obligatorio + get_datetime en Ollama local — 4–12 s por turno)
+- **Medium Priority**: 2 (setMessages innecesario en sub_agent_end cuando el último mensaje no es agent; recall_memory sin timeout defensivo ante modelo lento)
+- **Low Priority**: 2 (chatKey destrye estado de modo/sidebar innecesariamente; condición `streaming === true` correcta pero con cast redundante)
+- **Report Location**: respuesta directa del agente (sin archivo MD)
+
+### 2026-04-18 (feature: Orchestrator UX — OrchestratorStatusBar + DelegationBubble)
+- **Analysis Scope**: `OrchestratorStatusBar.tsx`, `DelegationBubble.tsx`, `useChatSession.ts`, `ChatView.tsx`
+- **Critical Issues**: 0
+- **High Priority**: 0
+- **Medium Priority**: 1 (double scan O(N) de `messages` para `hasRunningAction` y `hasFirstChunk` — **aplicado `useMemo` durante esta iteración**)
+- **Low Priority**: 2 (array allocation en `activeIndex` con `[...phases].reverse()` — negligible con 4 elementos; `DelegationMessage` efímero no persiste en historial cargado — comportamiento esperado pero no documentado)
+- **Report Location**: `docs/performance/orchestrator-ux-status-bar.md`
 
 ### 2026-04-18 (feature: CSS link migration — Tailwind v4 con Bun)
 - **Analysis Scope**: `src/web/index.html`, `src/web/app.tsx`, `src/web/styles/global.css`

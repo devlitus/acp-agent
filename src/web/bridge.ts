@@ -64,12 +64,12 @@ export class ACPWebSocketBridge {
   async start(_agentId: string, existingSessionId?: string): Promise<void> {
     try {
       const config = agentRegistry.get("orchestrator");
-      const systemPrompt = agentRegistry.getSystemPrompt(config);
+      const systemPromptBuilder = () => agentRegistry.getSystemPrompt(config);
       const llm = createProvider();
       const tools = toolRegistry.forAgent(config.tools);
       const connection = new DirectConnection(this.ws, this.pendingPermissions);
 
-      this.agent = new OllamaAgent(connection, llm, systemPrompt, tools, "orchestrator");
+      this.agent = new OllamaAgent(connection, llm, systemPromptBuilder, tools, "orchestrator");
       this.agent.onSubAgentChange = (agentId, agentName, agentIcon) => {
         if (agentId) {
           this.send({ type: "sub_agent_start", agentId, agentName, agentIcon });

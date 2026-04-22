@@ -6,6 +6,16 @@ import { mkdirSync } from "node:fs";
 export const DB_DIR = join(homedir(), ".acp-agent");
 export const DB_PATH = join(DB_DIR, "agent.db");
 
+function migrateMemory(db: Database): void {
+  const cols = db.query("PRAGMA table_info(memory)").all() as { name: string }[];
+  if (!cols.some(c => c.name === "category")) {
+    db.exec("ALTER TABLE memory ADD COLUMN category TEXT");
+  }
+  if (!cols.some(c => c.name === "source")) {
+    db.exec("ALTER TABLE memory ADD COLUMN source TEXT");
+  }
+}
+
 function migrate(db: Database): void {
   const tableInfo = db.query("PRAGMA table_info(sessions)").all() as { name: string; notnull: number }[];
   const hasAgentId = tableInfo.some(col => col.name === "agent_id");
@@ -63,6 +73,7 @@ function openDb(): Database {
     CREATE INDEX IF NOT EXISTS idx_memory_created_at         ON memory(created_at DESC);
   `);
   migrate(db);
+  migrateMemory(db);
   return db;
 }
 

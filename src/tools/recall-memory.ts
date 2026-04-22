@@ -1,9 +1,6 @@
 import type { Tool, ToolContext } from "./types.ts";
 import type { ToolCall } from "../llm/types.ts";
-import { db } from "../db.ts";
-
-const stmtAll = db.prepare("SELECT id, content FROM memory ORDER BY created_at DESC");
-const stmtKeyword = db.prepare("SELECT id, content FROM memory WHERE content LIKE ? ORDER BY created_at DESC");
+import { memoryStore } from "../agent/memory-store.ts";
 
 export const recallMemoryTool: Tool = {
   kind: "read",
@@ -20,13 +17,10 @@ export const recallMemoryTool: Tool = {
   },
   async execute(toolCall: ToolCall, _ctx: ToolContext): Promise<string> {
     const keyword = toolCall.arguments.keyword as string | undefined;
-    const rows = keyword
-      ? stmtKeyword.all(`%${keyword}%`)
-      : stmtAll.all();
+    const memories = memoryStore.recall(keyword);
 
-    const typed = rows as { id: number; content: string }[];
-    return typed.length === 0
+    return memories.length === 0
       ? "(no memories stored)"
-      : typed.map((r) => `[${r.id}] ${r.content}`).join("\n");
+      : memories.map(m => `[${m.id}] ${m.content}`).join("\n");
   },
 };

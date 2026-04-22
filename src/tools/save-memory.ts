@@ -1,8 +1,6 @@
 import type { Tool, ToolContext } from "./types.ts";
 import type { ToolCall } from "../llm/types.ts";
-import { db } from "../db.ts";
-
-const stmtInsert = db.prepare("INSERT INTO memory (content, created_at) VALUES (?, ?)");
+import { memoryStore } from "../agent/memory-store.ts";
 
 export const saveMemoryTool: Tool = {
   kind: "edit",
@@ -20,7 +18,7 @@ export const saveMemoryTool: Tool = {
   },
   async execute(toolCall: ToolCall, _ctx: ToolContext): Promise<string> {
     const content = toolCall.arguments.content as string;
-    stmtInsert.run(content, Date.now());
+    memoryStore.save(content, "manual");
     return "Memory saved.";
   },
 };

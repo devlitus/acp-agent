@@ -6,6 +6,7 @@ import { SetupPage } from "./components/SetupPage.tsx";
 
 function App() {
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [chatKey, setChatKey] = useState(0);
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -30,6 +31,7 @@ function App() {
 
   function handleNewSession() {
     setSessionId(null);
+    setChatKey((k) => k + 1);
   }
 
   function handleSwitchSession(id: string) {
@@ -43,6 +45,7 @@ function App() {
   return (
     <ErrorBoundary onReset={handleNewSession}>
       <ChatView
+        key={chatKey}
         agentId="orchestrator"
         sessionId={sessionId}
         onBack={handleNewSession}

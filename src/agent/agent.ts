@@ -9,6 +9,8 @@ interface AgentSession {
   pendingPrompt: AbortController | null;
 }
 
+export type SystemPromptBuilder = () => string;
+
 export class OllamaAgent implements acp.Agent {
   private sessions = new Map<string, AgentSession>();
   onSubAgentChange?: (agentId: string | null, agentName: string, agentIcon: string) => void;
@@ -16,7 +18,7 @@ export class OllamaAgent implements acp.Agent {
   constructor(
     private connection: ExtendedAgentConnection,
     private llm: LLMProvider,
-    private systemPrompt: string,
+    private buildSystemPrompt: SystemPromptBuilder,
     private toolRegistry: import("../tools/registry.ts").ToolRegistry,
     private agentId: string,
   ) {}
@@ -32,7 +34,7 @@ export class OllamaAgent implements acp.Agent {
     const sessionId = crypto.randomUUID();
     sessionStore.create(sessionId, this.agentId);
     this.sessions.set(sessionId, {
-      history: [{ role: "system", content: this.systemPrompt }],
+      history: [{ role: "system", content: this.buildSystemPrompt() }],
       pendingPrompt: null,
     });
     return { sessionId };

@@ -1,11 +1,12 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { ChatBubble, type ChatMessage } from "./ChatBubble.tsx";
 import { ActionCard } from "./ActionCard.tsx";
 import { PermissionModal } from "./PermissionModal.tsx";
 import { ModeToggle, useMode } from "./ModeToggle.tsx";
 import { SessionSidebar } from "./SessionSidebar.tsx";
-import { SubAgentIndicator } from "./SubAgentIndicator.tsx";
-import { useChatSession } from "../hooks/useChatSession.ts";
+import { OrchestratorStatusBar } from "./OrchestratorStatusBar.tsx";
+import { DelegationBubble } from "./DelegationBubble.tsx";
+import { useChatSession, type ActionItem } from "../hooks/useChatSession.ts";
 import type { AgentConfig } from "../../agents/types.ts";
 
 function EmptyState({ agentIcon, suggestedPrompts, onSelectPrompt }: {
@@ -76,8 +77,17 @@ export function ChatView({ agentId, sessionId, agentConfig, onBack, onSwitchSess
   }, [sidebarOpen]);
 
   useEffect(() => {
-    if (status === "ready" && messages.length > 0) inputRef.current?.focus();
-  }, [status, messages.length]);
+    if (status === "ready") inputRef.current?.focus();
+  }, [status]);
+
+  const hasRunningAction = useMemo(
+    () => messages.some((m) => m.role === "action" && (m as ActionItem).status === "running"),
+    [messages]
+  );
+  const hasFirstChunk = useMemo(
+    () => messages.some((m) => m.role === "agent"),
+    [messages]
+  );
 
   function handleSend(overrideText?: string) {
     const text = (overrideText ?? inputText).trim();
@@ -121,6 +131,13 @@ export function ChatView({ agentId, sessionId, agentConfig, onBack, onSwitchSess
         </div>
       </header>
 
+      <OrchestratorStatusBar
+        status={status}
+        activeSubAgent={activeSubAgent}
+        hasRunningAction={hasRunningAction}
+        hasFirstChunk={hasFirstChunk}
+      />
+
       <div className="flex flex-1 overflow-hidden">
         {/* Backdrop (mobile) */}
         {sidebarOpen && (
@@ -154,7 +171,16 @@ export function ChatView({ agentId, sessionId, agentConfig, onBack, onSwitchSess
                   if (msg.role === "action") {
                     return <ActionCard key={i} action={msg} mode={mode} />;
                   }
-                  return <ChatBubble key={i} message={msg} />;
+                  if (msg.role === "delegation") {
+                    return (
+                      <DelegationBubble
+                        key={i}
+                        agentIcon={msg.agentIcon}
+                        agentName={msg.agentName}
+                      />
+                    );
+                  }
+                  return <ChatBubble key={i} message={msg as ChatMessage} />;
                 })}
                 <div ref={messagesEndRef} />
               </>
@@ -165,14 +191,6 @@ export function ChatView({ agentId, sessionId, agentConfig, onBack, onSwitchSess
 
       {pendingPermission && (
         <PermissionModal request={pendingPermission} onSelect={selectPermission} />
-      )}
-
-      {activeSubAgent && (
-        <SubAgentIndicator
-          agentId={activeSubAgent.agentId}
-          agentName={activeSubAgent.agentName}
-          agentIcon={activeSubAgent.agentIcon}
-        />
       )}
 
       {/* Input area */}

@@ -7,6 +7,7 @@ import { LMStudioProvider } from "../llm/lm-studio.ts";
 import { getLLMProvider, getAgentId } from "../config.ts";
 import { registry as agentRegistry } from "../agents/index.ts";
 import { registry as toolRegistry } from "../tools/index.ts";
+import { memoryStore } from "./memory-store.ts";
 import type { LLMProvider } from "../llm/types.ts";
 import type { AgentConfig } from "../agents/types.ts";
 
@@ -24,6 +25,28 @@ function createProvider(): LLMProvider {
   }
 }
 
+const MAX_PROMPT_CHARS = 8000;
+const MAX_MEMORIES = 20;
+
+function buildSystemPrompt(config: AgentConfig): string {
+  const basePrompt = agentRegistry.getSystemPrompt(config);
+  const recentMemories = memoryStore.recallRecent(MAX_MEMORIES);
+
+  if (recentMemories.length === 0) return basePrompt;
+
+  const memoryBlock = `\n\n## Facts you remember about this user:\n${recentMemories.map(m => `- ${m.content}`).join("\n")}`;
+
+  const fullPrompt = basePrompt + memoryBlock;
+  if (fullPrompt.length > MAX_PROMPT_CHARS) {
+    const available = MAX_PROMPT_CHARS - basePrompt.length - 40;
+    if (available < 100) return basePrompt;
+    const truncated = memoryBlock.slice(0, available);
+    return basePrompt + truncated + "\n...";
+  }
+
+  return fullPrompt;
+}
+
 // Validate agent configuration at startup
 try {
   agentRegistry.validate();
@@ -39,13 +62,13 @@ const output = Readable.toWeb(process.stdin) as unknown as ReadableStream<Uint8A
 const llm = createProvider();
 
 let agentConfig: AgentConfig;
-let systemPrompt: string;
+let systemPromptBuilder: () => string;
 let tools: ReturnType<typeof toolRegistry.forAgent>;
 
 const agentId = getAgentId();
 try {
   agentConfig = agentRegistry.get(agentId);
-  systemPrompt = agentRegistry.getSystemPrompt(agentConfig);
+  systemPromptBuilder = () => buildSystemPrompt(agentConfig);
   tools = toolRegistry.forAgent(agentConfig.tools);
 } catch (err) {
   const validIds = agentRegistry.getAll()
@@ -59,6 +82,6 @@ try {
 
 const stream = acp.ndJsonStream(input, output);
 new acp.AgentSideConnection(
-  (conn) => new OllamaAgent(conn, llm, systemPrompt, tools, agentId),
+  (conn) => new OllamaAgent(conn, llm, systemPromptBuilder, tools, agentId),
   stream,
 );
